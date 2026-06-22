@@ -309,6 +309,25 @@ def _assemble_partial_review(six_second, red_flags, competitive, market_context)
 
 The orchestrator is 480 lines. It's the brain of the entire analysis pipeline.
 
+### Design Reasoning — Why 6 Agents?
+
+```
+Why not 1 agent that does everything?
+  - Single agent with 2000+ token output → quality degrades
+  - Harder to debug: which subsystem failed?
+  - No parallelism: everything runs sequentially
+
+Why these specific 6?
+  - MarketContext: calibrates weights for everything downstream
+  - RedFlag: pattern-matching, needs weight_map
+  - SixSecond: first-impression, needs weight_map
+  - Competitive: percentile calc, needs weight_map
+  - TechnicalDepth: deep project analysis, independent
+  - Review: synthesis, needs ALL upstream outputs
+```
+
+The separation follows the **Single Responsibility Principle** for LLM agents. Each agent has one job, one prompt, one output schema. This makes them independently testable and replaceable.
+
 ### Execution Order: 3 Stages, 6 Agents
 
 ```
@@ -335,6 +354,14 @@ Each semaphore prevents resource exhaustion at a different level:
 - **Groq sem (2)**: Multiple API keys share a pool-wide RPD. Limiting concurrency prevents daily quota burn.
 - **Global sem (3)**: Prevents 100 concurrent users from overwhelming free-tier providers.
 - **Tech depth sem (3)**: gpt-oss-120b has 24K TPM across 3 keys. Semaphore keeps bursts under limit.
+
+### Design Reasoning — Semaphore Values
+
+| Semaphore | Value | Why 2/3 and not 5 or 10 |
+|-----------|-------|--------------------------|
+| `_groq_sem` | 2 | Free-tier RPD: 14,400 for 8B, 1,000 for 70B. With 2 concurrent, each call averages 0.5s → 2 calls/s = 172K calls/day. Higher would burn RPD in hours. |
+| `_global_sem` | 3 | Free-tier Cloud Run has 10 concurrent max. 3 leaves headroom for HTTP serving + health checks. |
+| `_tech_depth_sem` | 3 | 3 API keys × 2 concurrent = 6 calls. Each TechnicalDepth call takes ~90s. 6 × 90s = 9min not counting other agents. At 3 concurrent, a full pipeline takes ~3min — acceptable UX. |
 
 ### Error Propagation — Never Crash
 
@@ -398,6 +425,33 @@ Each completed section is emitted via WebSocket AND persisted in Redis. If the u
 ---
 
 ## DIVE Retrieval (5 Stages)
+
+### Design Reasoning
+
+**Why BM25 + Vector (hybrid) and not just one?**
+```
+BM25 only:  Exact keyword match. Misses "salary" when query is "compensation"
+Vector only: Semantic match. Misses exact "Python 3.12" in favor of "programming language"
+Hybrid:     Both. "senior software engineer salary" → BM25 catches "salary", vector catches "senior software engineer compensation"
+```
+
+**Why SQLite FTS5 over Elasticsearch?**
+```
+Elasticsearch:  Needs a server, ~2GB RAM, ops overhead
+SQLite FTS5:    Built into Python stdlib (almost), zero config, zero cost
+Tradeoff:       SQLite FTS5 is ~100x slower than ES on 100K+ docs.
+                At ~10K signals, SQLite is fast enough (<100ms per query).
+```
+
+**Why RRF_K = 60?**
+The RRF constant K controls how quickly rank position affects score:
+```
+K=1:   Rank #1 = 1.0, Rank #10 = 0.09 → extreme bias to top results
+K=60:  Rank #1 = 0.016, Rank #10 = 0.014 → gentle decay
+K=100: Rank #1 = 0.0099, Rank #10 = 0.0091 → almost uniform
+```
+
+K=60 is the standard from the original RRF paper. It provides gentle rank decay where docs appearing in BOTH lists are favored but top-ranked docs from one list still get credit.
 
 ```mermaid
 flowchart LR
@@ -505,6 +559,44 @@ On server startup, `warmup_cache()` refreshes top 15 combos (by historical `comb
 
 ## LLM Routing & Fallback
 
+### Model Selection Reasoning
+
+**Why Groq as primary?**
+```
+Free tier:  14,400 RPD for 8B models, 1,000 RPD for 70B models
+Latency:    0.2-0.5s per call (LPU hardware vs GPU)
+Models:     Llama, Qwen, GPT-OSS — diverse architecture coverage
+
+Alternatives considered:
+  OpenAI:    $0.15-1.00/1M tokens — too expensive for free-tier project
+  Anthropic: $3/1M tokens — also too expensive  
+  Together:  Good model variety but similar cost
+  Replicate: Per-second billing, unpredictable costs
+```
+
+**Why 5 providers?**
+```
+Why not 2 or 3? At free tier, every provider has rate limits.
+  Groq:  14,400 RPD → 1 analysis uses 6-12 calls → 1,200-2,400 analyses/day
+  Gemini: 1,500 RPD → 125-250 analyses/day
+  NIM:    40 RPM → ~400-800 analyses/day
+  OpenRouter: 50 RPD → 4-8 analyses/day
+  Cerebras: 1M tokens/day
+
+With 5 providers and circuit breakers, total daily capacity = sum of all free tiers.
+Losing any single provider reduces capacity but doesn't block users.
+```
+
+**Why different models per agent?**
+```
+Review Agent:     llama-3.3-70b (largest, most coherent synthesis)
+RedFlag Agent:    llama-3.3-70b (needs nuanced judgment)
+SixSecond Agent:  qwen3-32b (faster, good for impression)
+Competitive:      gpt-oss-20b (good with numerical reasoning)
+TechnicalDepth:   gpt-oss-120b (deepest technical knowledge)
+MarketContext:    llama-3.1-8b (simple classification, fastest)
+```
+
 ```mermaid
 flowchart TB
     subgraph Agent["Each Agent"]
@@ -555,6 +647,21 @@ flowchart TB
 ---
 
 ## Circuit Breaker Implementation (`llm/circuit_breaker.py`)
+
+### Design Reasoning
+
+**Why in-memory and not Redis?** Circuit breakers are per-instance by design. Each container should independently decide when to stop calling a provider. If all 3 containers open simultaneously (e.g., Groq is down), that's correct behavior. Redis persistence would add latency to every LLM call and complexity to the HALF-OPEN recovery logic.
+
+**Why 3 failures and 5 minutes?**
+```
+3 failures:   One failure = transient (network glitch). Two = suspicious.
+              Three = pattern. At 3, provider is likely degraded.
+5 minutes:    Groq free tier recovers from rate limits in ~1-2 minutes.
+              If 3 failures in a row, probably not a rate limit — give 5min.
+              Long enough to avoid rapid open-close cycling.
+```
+
+**Why single success closes?** If a HALF-OPEN probe succeeds, the provider is healthy. No reason to keep it partially open. Immediate CLOSED minimizes false negatives.
 
 ### 3-State Machine
 
@@ -675,6 +782,22 @@ Fire-and-forget trace on every successful LLM call (if session_id + agent_name p
 ---
 
 ## Rate Limiter (`storage/rate_limit.py`)
+
+### Design Reasoning
+
+**Why 3/day and not 5 or 10?**
+```
+Free-tier analysis costs:
+  Each analysis: 6-12 LLM calls × $0 (free tier RPD-limited)
+  With 3/day: ~36 LLM calls/day per IP → fits in Groq's 14,400 RPD
+  With 10/day: ~120 calls/day → 1,200 analyses/day = 14% of Groq's daily budget
+  
+3/day is conservative. It prevents a single user from burning the entire free tier.
+Token unlock extends this to 4/day for users who provide email.
+```
+
+**Why IST midnight reset?**
+Users are in India (IST). Midnight reset aligns with daily free tier quota cycles. Also when users naturally expect a "fresh day" of credits.
 
 ### IP-Based, 3 Analyses/Day
 

@@ -209,6 +209,48 @@ data/phone_map.json
 
 ## Inbound Call Flow — Complete Step-by-Step
 
+### Design Reasoning
+
+**Why VAPI and not Twilio/AWS Connect?**
+```
+Twilio:     More mature, but requires building ASR+NLU+TTS stack yourself
+AWS Connect: Enterprise-focused, complex pricing, 12-month lock-in
+VAPI:       Purpose-built for AI voice agents. Provides websocket for streaming
+            transcript. 7.5s webhook timeout matches UX requirement.
+            Free tier: 5 concurrent calls, enough for MVP.
+```
+
+**Why 5-layer ANI resolution?**
+```python
+# Layer 1: SIP Diversion header (caller's original number)
+# Layer 2: SIP From/To headers (PBX-level identifiers)
+# Layer 3: In-memory phone→business map (hot cache)
+# Layer 4: Firestore query by business phone
+# Layer 5: Firestore query by owner's personal number
+```
+
+Each layer exists because SIP headers are unreliable:
+- Some carriers pass Diversion header, some don't
+- Some PBXs rewrite From/To headers
+- In-memory cache is fast but can be stale
+- Firestore is the source of truth but slow (100-300ms)
+
+5 layers ensure resolution works regardless of the telco quirks. The tradeoff: up to 5 sequential lookups = ~1.5s worst case vs 200ms for Layer 1 success. But the 7.5s timeout accommodates this.
+
+**Why Firestore and not PostgreSQL?**
+Serverless Firebase = zero ops. No connection pooling, no migrations, no VPC.
+Tradeoff: Firestore read latency is 100-300ms vs 1-5ms for local SQLite.
+But the system is multi-tenant (multiple businesses) and needs persistence
+across restarts — so file-based SQLite won't work. Firestore fits the
+serverless-internship infra constraint.
+
+**Why 7.5s timeout specifically?**
+VAPI's fixed webhook timeout is 7.5s. This dictated the entire architecture:
+- Critical path: ANI → config → response MUST fit in 7.5s
+- Non-critical: Slack notification, FCM push → fire-and-forget AFTER response
+- If 7.5s had been 3s: needed local SQLite cache + pre-warmed configs
+- If 15s: could have done more inline processing before response
+
 This is the CRITICAL path. Understand every step.
 
 ```mermaid
@@ -345,6 +387,26 @@ async def handle_assistant_request(payload):
 
 ### Step 3: Build Assistant Config (`prompt_builder.py`)
 
+### Design Reasoning
+
+**Why 3 prompt modes (personal/business/hybrid)?**
+```
+Personal:  For personal numbers — "Hey, you've reached John"
+Business:  For business numbers — "Thank you for calling City Dental Clinic"
+Hybrid:    Auto-detects intent — "Is this about the business or personal?"
+```
+
+This maps to how people actually use dual-SIM phones. A single business may have:
+- A published business number → always business mode
+- The owner's mobile → hybrid (could be business or personal call)
+- Emergency calls → bypass AI, ring directly
+
+**Why prompt templates with variables and not hardcoded text?**
+Variables (business name, hours, services, greeting) mean one prompt template
+works for ALL tenants. Changing a business's hours = update Firestore, not
+redeploy. This is the same pattern as Amelia's Entity system — define the
+data separately from the conversation logic.
+
 ```python
 # prompt_builder.py — 3-mode prompt engine
 def build_system_prompt(business, mode):
@@ -479,6 +541,23 @@ async def post_call_setup(business, call_id, caller_phone):
 
 ## Transcript Streaming Flow
 
+### Design Reasoning
+
+**Why WebSocket + Slack + FCM in parallel?**
+```
+Three consumers for the SAME transcript:
+1. WebSocket: Mobile app live view (user-facing)
+2. Slack: Business owner monitoring (admin-facing)  
+3. FCM: Push notification (interrupt on phone)
+
+Each has different latency requirements:
+- WebSocket: <1s (real-time feel)
+- Slack: <3s (thread update, user tolerates delay)
+- FCM: <5s (push notification latency)
+
+Running them in parallel via asyncio.gather means the SLOWEST consumer
+determines throughput, not the sum. If FCM takes 2s, WebSocket isn't delayed.
+
 ```mermaid
 sequenceDiagram
     participant V as VAPI
@@ -610,6 +689,39 @@ async def handle_end_of_call_report(payload):
 ```
 
 ### Groq Summarization
+
+**Model choice**: Groq `llama-3.1-8b-instant` over Gemini or GPT-4o-mini.
+
+**Why Groq?**
+```
+Groq:       <500ms latency, free tier (14,400 RPD), LPU hardware
+Gemini:     ~1-2s latency, free tier (1,500 RPD), Google Cloud needed
+GPT-4o-mini: ~1s latency, $0.15/1M tokens — costs money
+```
+
+Latency matters here because summarization happens AFTER the call ends.
+The user is waiting for the summary to appear in the app. Under 500ms
+feels instant; over 2s feels slow.
+
+**Summarization Prompt Strategy**:
+```python
+SUMMARY_PROMPT = """
+Summarize this business call transcript in 3-4 sentences.
+Focus on: caller's request, resolution (or required follow-up),
+any action items.
+
+Transcript:
+{transcript}
+
+Summary:
+"""
+```
+
+**Why not structured JSON output?**
+The summary is shown to the business owner in Slack + app. Natural language
+is more readable than JSON for a human reading a notification. The AI
+call classification (sales/inquiry/support/spam) is a simple enum extracted
+separately via regex on the summary text.
 
 ```python
 # groq_service.py
