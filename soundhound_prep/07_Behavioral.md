@@ -21,6 +21,89 @@
 | Group Anagrams | Medium | Hash Map | Key = sorted string → defaultdict(list) |
 | First Missing Positive | Hard | Hash Map | Use array indices as hash keys |
 
+### Solved Solutions (Pattern + Code)
+
+**Check if Array Is Sorted and Rotated**
+```python
+def check(nums):
+    # Pattern: Count "breaks" where next < prev
+    # In a sorted array, there should be at most 1 break
+    breaks = 0
+    for i in range(len(nums)):
+        if nums[i] > nums[(i + 1) % len(nums)]:
+            breaks += 1
+    return breaks <= 1
+
+# [3,4,5,1,2] → 1 break (5→1) → True
+# [2,1,3,4]   → 1 break (2→1) → False (wait — actually 1 break, but not sorted)
+# Wait, let me trace: 2>1=break, 1<3=ok, 3<4=ok, 4>2=break → 2 breaks → False ✓
+```
+
+**Valid Anagram**
+```python
+from collections import Counter
+
+def is_anagram(s, t):
+    # Pattern: Compare character frequency maps
+    return Counter(s) == Counter(t)
+
+# is_anagram("listen", "silent") → True
+# is_anagram("hello", "world")  → False
+```
+
+**Two Sum**
+```python
+def two_sum(nums, target):
+    # Pattern: Store complement in hash map
+    seen = {}
+    for i, n in enumerate(nums):
+        complement = target - n
+        if complement in seen:
+            return [seen[complement], i]
+        seen[n] = i
+    return []
+
+# two_sum([2, 7, 11, 15], 9) → [0, 1]
+```
+
+**Group Anagrams**
+```python
+from collections import defaultdict
+
+def group_anagrams(strs):
+    # Pattern: Sorted string as hash key
+    groups = defaultdict(list)
+    for s in strs:
+        key = ''.join(sorted(s))
+        groups[key].append(s)
+    return list(groups.values())
+
+# group_anagrams(["eat","tea","tan","ate","nat","bat"])
+# → [["eat","tea","ate"], ["tan","nat"], ["bat"]]
+```
+
+**First Missing Positive**
+```python
+def first_missing_positive(nums):
+    # Pattern: Use array indices as hash keys
+    # Place each number at its correct index (nums[i] at position nums[i]-1)
+    i = 0
+    while i < len(nums):
+        correct_pos = nums[i] - 1
+        if 0 <= correct_pos < len(nums) and nums[i] != nums[correct_pos]:
+            nums[i], nums[correct_pos] = nums[correct_pos], nums[i]
+        else:
+            i += 1
+    
+    for i in range(len(nums)):
+        if nums[i] != i + 1:
+            return i + 1
+    return len(nums) + 1
+
+# first_missing_positive([3,4,-1,1]) → 2
+# first_missing_positive([7,8,9,11,12]) → 1
+```
+
 ### CIE-Level Questions (From AmbitionBox Interviews)
 
 These are what Cognitive Implementation Engineer candidates actually get asked:
@@ -74,7 +157,7 @@ def has_unique(s):
 
 | Fact | Detail |
 |------|--------|
-| **Degree** | B.E. Electronics & Communication Engineering, Ramaiah Institute of Technology, 2022–2026 |
+| **Degree** | B.E. Electronics & Communication Engineering, Ramaiah Institute of Technology, 2022–2026 (Graduated) |
 | **Internship** | AI Engineer Intern, Beaut Group (SuperOwl), Feb–Jun 2026, on-site Bengaluru. **Solo.** |
 | **Projects** | ROAST (solo, 100+ users), SYNAPSE (solo), ACARE (team — institutionally funded), SuperOwl (solo internship) |
 | **Skills** | Python, JavaScript, FastAPI, WebSockets, Redis, SQLite, Firestore, Docker, GitHub Actions, AWS, React, React Native |
@@ -115,7 +198,7 @@ def has_unique(s):
 
 ### Full Script (Practice Out Loud)
 
-> "I'm in my final year of Electronics & Communication Engineering at Ramaiah Institute of Technology. I've been building AI and backend systems for the past year — shipping production code, deploying to real users.
+> "I've just completed my B.E. in Electronics & Communication Engineering at Ramaiah Institute of Technology. I've been building AI and backend systems for the past year — shipping production code, deploying to real users.
 >
 > I built four systems that connect to this role.
 >

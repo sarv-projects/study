@@ -281,6 +281,120 @@ Example output for "SDE at Indian Startup":
 
 **Final fallback**: `_assemble_partial_review()` — deterministic Python synthesis. No LLM needed. Lower quality but NEVER fails.
 
+```python
+def _assemble_partial_review(six_second, red_flags, competitive, market_context):
+    high_flags = [f for f in red_flags.red_flags if f.severity == "HIGH"]
+    flag_text = " ".join([f.flag for f in high_flags[:3]]) if high_flags else "No critical issues found."
+
+    return ReviewOutput(
+        tldr_shortlist_chance=competitive.percentile_estimate.range,
+        tldr_biggest_blocker=flag_text,
+        tldr_fix_first=competitive.highest_leverage_change,
+        confidence="LOW",
+        whats_working_section=" ".join(competitive.strengths_vs_pool[:2]),
+        whats_hurting_section=" ".join([f.inference_chain for f in high_flags[:2]]),
+        career_story_section=six_second.career_story,
+        competitive_position_section=competitive.percentile_estimate.reasoning,
+        action_plan_section=competitive.highest_leverage_change,
+        jd_alignment_section="",
+        six_second_followups=["What can I improve about my first impression?"],
+    )
+```
+
+**Trigger condition**: Called only after 2 LLM attempts with 2 different providers (with retry instructions) all fail. Copies upstream outputs directly — no LLM involvement.
+
+---
+
+## Orchestrator Deep Dive (`pipeline/orchestrator.py`)
+
+The orchestrator is 480 lines. It's the brain of the entire analysis pipeline.
+
+### Execution Order: 3 Stages, 6 Agents
+
+```
+Stage 1 (sequential): JD Parser → DIVE Retrieval → ResumeExtractor
+Stage 2 (sequential): MarketContextAgent (runs alone, needs DIVE output)
+Stage 3 (parallel):   ┌── RedFlagAgent
+                      ├── SixSecondAgent
+                      ├── CompetitiveAgent
+                      └── TechnicalDepthAgent
+Stage 4 (sequential): ReviewAgent (with fallback chain + quality gate)
+Stage 5 (async):      Corpus store + bullet curation (fire-and-forget)
+```
+
+### Semaphore System — 4 Levels of Concurrency
+
+```python
+_groq_sem = asyncio.Semaphore(2)        # Max 2 concurrent Groq calls
+_gemini_sem = asyncio.Semaphore(1)      # Max 1 concurrent Gemini call
+_global_sem = asyncio.Semaphore(3)      # Max 3 simultaneous full pipelines
+_tech_depth_sem = asyncio.Semaphore(3)  # gpt-oss-120b: 24K TPM with 3 keys
+```
+
+Each semaphore prevents resource exhaustion at a different level:
+- **Groq sem (2)**: Multiple API keys share a pool-wide RPD. Limiting concurrency prevents daily quota burn.
+- **Global sem (3)**: Prevents 100 concurrent users from overwhelming free-tier providers.
+- **Tech depth sem (3)**: gpt-oss-120b has 24K TPM across 3 keys. Semaphore keeps bursts under limit.
+
+### Error Propagation — Never Crash
+
+Every parallel agent is wrapped with `return_exceptions=True`:
+
+```python
+red_flags, six_second, competitive, tech_depth = await asyncio.gather(
+    _run_red_flag(session, request, market_context, progress_callback),
+    _run_six_second(session, request, resume_facts, progress_callback),
+    _run_competitive(session, request, resume_facts, progress_callback),
+    _run_tech_depth(session, request, resume_facts, progress_callback),
+    return_exceptions=True
+)
+```
+
+Each failure is caught and replaced with a fallback output:
+
+```python
+if isinstance(red_flags, Exception):
+    red_flags = RedFlagOutput(red_flags=[], visual_scan_notes="", confidence="LOW")
+```
+
+**The pipeline NEVER crashes.** Every agent has a guaranteed fallback schema.
+
+### Confidence Override
+
+```python
+if full_market_ctx.raw_signal_count >= 10 and market_context.confidence == "LOW":
+    market_context.confidence = "HIGH"  # LLM is too conservative
+```
+
+When DIVE retrieves 10+ signals but the MarketContextAgent still says "LOW" confidence, the orchestrator overrides it. The LLM is inherently conservative; the orchestrator knows better.
+
+### Prompt Versioning for A/B Testing
+
+```python
+def _compute_prompt_hash(session, request):
+    all_prompts = "...".join([p1, p2, p3, p4, p5])
+    return hashlib.sha256(all_prompts.encode()).hexdigest()[:8]
+
+def _get_prompt_variant(session_id):
+    return "A" if int(hashlib.md5(session_id.encode()).hexdigest()[-1], 16) % 2 == 0 else "B"
+```
+
+Every analysis records which prompt variant was used. Enables A/B testing prompt changes without separate deployments.
+
+### Section-Level Streaming
+
+```python
+async def _emit_section(session_id, section_name, result):
+    await ws_manager.emit(session_id, {
+        "event": "section_complete",
+        "data": {"section": section_name, "result": result}
+    })
+    # Also persist to Redis for reconnection recovery
+    redis.setex(f"session:{session_id}:{section_name}", 3600, json.dumps(result))
+```
+
+Each completed section is emitted via WebSocket AND persisted in Redis. If the user disconnects and reconnects, `_get_completed_sections()` replays completed sections.
+
 ---
 
 ## DIVE Retrieval (5 Stages)
@@ -297,19 +411,95 @@ flowchart LR
     LLMD --> OUT["DistilledMarketContext"]
 ```
 
-**Stage 1 — Query Rewriting**: One combo → 6 queries targeting different aspects (salary, skills, hiring trends, company news, competition, market sentiment).
+### Stage 1 — Query Rewriting
 
-**Stage 2 — Parallel Search**: BM25 and vector search run simultaneously via `asyncio.gather`.
+One combo → 6 targeted queries:
 
-**Stage 3 — RRF Fusion**: Combine ranked lists. Score = sum(1/(60 + rank_i)). Avoids comparing different score scales.
+```python
+def _build_retrieval_queries(role, company_type, market, experience_level):
+    return [
+        f"{role} hiring sentiment {company_type} {market}",
+        f"{role} required skills tools {company_type} {market}",
+        f"{role} competitive pool applicants {market}",
+        f"{role} definition expectations {experience_level} {market}",
+        f"{role} red flags resume {company_type} {market}",
+        f"{role} salary format norms {market}",
+    ]
+```
 
-**Stage 4 — Dedup + Filter**: Remove duplicates by content hash. Remove low-quality signals.
+Each query targets a different aspect (salary, skills, hiring trends, company news, competition, market sentiment).
 
-**Stage 5 — LLM Distiller**: llama-3.1-8b compresses signals into concise context for MarketContextAgent.
+### Stage 2 — Parallel Search
 
-**Caching**: Redis (15-day TTL for snapshots, 60-day for previous version, 24h for breaking signals).
+BM25 and vector search run simultaneously:
 
-**Warmup**: At startup, pre-warms top 15 combos so first user doesn't wait.
+```python
+async def _parallel_search(queries, combo_id):
+    bm25_results, vector_results = await asyncio.gather(
+        asyncio.to_thread(_bm25_search, queries),     # SQLite FTS5
+        asyncio.to_thread(_vector_search, queries),   # Numpy cosine similarity
+    )
+```
+
+- **BM25**: SQLite FTS5 — runs all 6 queries against `market_signals` FTS5 index, deduplicates by signal `id`
+- **Vector**: Gemini embedding (3072-dim) → numpy cosine similarity against stored BLOBs. Combined query string embedded once.
+
+### Stage 3 — RRF Fusion
+
+Standard Reciprocal Rank Fusion:
+
+```python
+RRF_K = 60
+def _rrf_fusion(bm25_results, vector_results):
+    scores = {}
+    for rank, row in enumerate(bm25_results, start=1):
+        scores[row["id"]] = scores.get(row["id"], 0) + 1 / (RRF_K + rank)
+    for rank, row in enumerate(vector_results, start=1):
+        scores[row["id"]] = scores.get(row["id"], 0) + 1 / (RRF_K + rank)
+    sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+    return [rows_by_id[i] for i in sorted_ids]
+```
+
+Documents appearing in BOTH BM25 and vector results get double the score — they float to the top.
+
+### Stage 4 — Hash Dedup + Quality Filter
+
+```python
+def _hash_dedup(results, limit=25):
+    seen_hashes = set()
+    filtered = []
+    for row in results:
+        content_hash = hashlib.md5(row["content"][:200].encode()).hexdigest()
+        if content_hash not in seen_hashes:
+            seen_hashes.add(content_hash)
+            if len(row.get("content", "")) >= 30:  # quality filter
+                filtered.append(row)
+    return filtered[:25]
+```
+
+### Stage 5 — LLM Distiller
+
+llama-3.1-8b compresses top 25 signals into a concise `DistilledMarketContext` for MarketContextAgent:
+
+```python
+DISTILLER_SYSTEM = """You are a market intelligence analyst. Given raw hiring signals,
+extract: key salary ranges, in-demand skills, hiring sentiment, common red flags.
+Output: concise JSON with fields: salary_range, top_skills, sentiment, key_insights, signal_count"""
+```
+
+On failure: returns DB defaults with `confidence="LOW"`.
+
+### Caching Strategy (3-tier)
+
+| Cache | Key Pattern | TTL | Purpose |
+|-------|------------|-----|---------|
+| **Snapshot** | `snapshot:{role}:{company}:{market}` | 15 days | Full DIVE result |
+| **Previous snapshot** | `snapshot_prev:{role}:{company}:{market}` | 60 days | For diff comparison |
+| **Breaking signal** | `breaking:{market}:{category}:{company}` | 24 hours | Fresh news layer |
+
+### Warmup
+
+On server startup, `warmup_cache()` refreshes top 15 combos (by historical `combo_count:` in Redis). Each stale (>24h) combo gets a fresh DIVE run. This ensures the first user of the day doesn't wait for retrieval.
 
 ---
 
@@ -361,6 +551,381 @@ flowchart TB
 | Competitive | gpt-oss-20b (Groq) | NIM | — | — |
 | TechnicalDepth | gpt-oss-120b (Groq) | llama-3.1-8b | — | — |
 | MarketContext | llama-3.1-8b (Groq) | — | — | — |
+
+---
+
+## Circuit Breaker Implementation (`llm/circuit_breaker.py`)
+
+### 3-State Machine
+
+```python
+class CircuitBreaker:
+    def __init__(self, name, failure_threshold=3, cooldown_seconds=300):
+        self.name = name
+        self.state = "closed"        # closed → open → half_open
+        self.failures = 0
+        self.threshold = 3           # 3 consecutive failures → open
+        self.cooldown = 300           # 5 minutes cooldown
+        self.last_failure_time = 0
+
+    def record_failure(self):
+        self.failures += 1
+        if self.failures >= self.threshold:
+            self.state = "open"
+            self.last_failure_time = time.time()
+
+    def record_success(self):
+        if self.state == "half_open":
+            self.state = "closed"
+            self.failures = 0
+
+    def should_skip(self):
+        if self.state == "open":
+            if time.time() - self.last_failure_time > self.cooldown:
+                self.state = "half_open"
+                return False  # Allow 1 probe call
+            return True  # Fast-fail
+        return False  # Let the call through
+```
+
+| State | Behavior |
+|-------|----------|
+| **CLOSED** | Normal operation. Calls go through. |
+| **OPEN** | Fast-fail for 5 minutes. No calls attempted. |
+| **HALF-OPEN** | Allow 1 test call. Success → CLOSED. Failure → OPEN again. |
+
+### Key Details
+
+- **In-memory only** — NOT persisted to Redis. Restart resets all circuits.
+- **Not distributed** — each worker/container has its own circuit breaker state.
+- **Time-based recovery** — transitions HALF-OPEN after exactly 300s, not after a configurable interval.
+- **Single success closes** — one successful call in HALF-OPEN resets to CLOSED immediately.
+
+### 5 Singleton Breakers
+
+```python
+# Module-level singletons — one per provider
+groq_cb = CircuitBreaker("groq")
+gemini_cb = CircuitBreaker("gemini")
+cerebras_cb = CircuitBreaker("cerebras")
+openrouter_cb = CircuitBreaker("openrouter")
+nvidia_nim_cb = CircuitBreaker("nvidia_nim")
+```
+
+---
+
+## Groq Key Rotation (`llm/groq_client.py`)
+
+### Distributed Round-Robin via Redis
+
+```python
+_keys = [k.strip() for k in GROQ_API_KEYS.split(",")]
+
+async def _get_key_index():
+    idx = await redis.incr("groq:round_robin_counter")
+    return (idx - 1) % len(_keys)
+```
+
+Every API call atomically increments `groq:round_robin_counter` in Redis. The index is computed as `(counter - 1) % key_count`. This distributes evenly across all workers/containers since the counter lives in Redis.
+
+### RPD Tracking Per Model Per Key
+
+```python
+RPD_LIMITS = {
+    "llama-3.1-8b-instant":    14400,
+    "llama-3.3-70b-versatile":  1000,
+    "qwen/qwen3-32b":           1000,
+    "openai/gpt-oss-20b":       1000,
+    "openai/gpt-oss-120b":      1000,
+}
+```
+
+Each model × each key has a counter at `groq:rpd:{model}:{key_index}`. TTL set with 0-300s random jitter to expire at midnight UTC (prevents thundering herd).
+
+### 429 Handling
+
+```python
+except RateLimitError:
+    key_idx = _rotate(key_idx)  # (current + 1) % len(_keys)
+    client = AsyncGroq(api_key=_keys[key_idx])
+    await asyncio.sleep(backoff[attempt])  # [2, 4, 8]
+```
+
+On 429: rotate to next key, retry with exponential backoff (2s, 4s, 8s).
+
+### Proactive Fallback Warnings
+
+RPM remaining is extracted from response headers and stored in Redis. If < 50 remaining, logged as warning for operator alerting.
+
+### Qwen3 Thinking Mode Handling
+
+```python
+if "</think>" in text:
+    text = text[text.index("</think>") + len("</think>"):].strip()
+elif text.startswith("<think>"):
+    raise RuntimeError("qwen3_thinking_truncated")  # triggers retry with higher temp
+```
+
+Qwen3 models wrap their reasoning in `<think>...</think>` tags. The client strips them. If the thinking is truncated (no closing tag), it retries with higher temperature.
+
+### Langfuse Tracing
+
+Fire-and-forget trace on every successful LLM call (if session_id + agent_name provided). Tracks: model, provider, prompt tokens, completion tokens, latency, and agent name.
+
+---
+
+## Rate Limiter (`storage/rate_limit.py`)
+
+### IP-Based, 3 Analyses/Day
+
+```python
+FREE_ANALYSES_PER_DAY = 3
+IST = ZoneInfo("Asia/Kolkata")
+
+def check_and_increment(ip):
+    key = f"ratelimit:{ip}"
+    count = redis.incr(key)
+    if count == 1:
+        ttl = _seconds_until_midnight_ist()
+        redis.expire(key, ttl)
+    allowed = count <= 3
+    if not allowed:
+        redis.decr(key)  # undo the atomic incr
+    return {"allowed": allowed, "count": count, "remaining": max(0, 3 - count), "limit": 3}
+```
+
+### Midnight Reset (IST)
+
+```python
+def _seconds_until_midnight_ist():
+    now = datetime.now(IST)
+    midnight = datetime.combine(now.date(), time(0, 0, 0), tzinfo=IST)
+    if midnight <= now:
+        midnight += timedelta(days=1)
+    return int((midnight - now).total_seconds())
+```
+
+### Token Unlock Override
+
+In `analyse.py`: if rate limited AND `redis.get(f"token_unlocked:{session_id}")` exists, the rate limit is skipped and the token key is deleted (one-time use). Users can get an email token for an extra analysis.
+
+### Anti-Bot Timing Gate
+
+```python
+if elapsed < 1.0:  # Reject requests faster than 1 second (likely a bot)
+    raise HTTPException(429)
+```
+
+---
+
+## Session Store (`storage/session_store.py`)
+
+### Redis Key Pattern
+
+```
+session:{session_id}  # TTL: 3600s (1 hour)
+```
+
+### Fields Stored
+
+```python
+session = {
+    "session_id": str(uuid.uuid4()),
+    "role": str,                    # e.g. "SDE1"
+    "market": str,                  # e.g. "India"
+    "company_type": str,            # e.g. "Indian Product Company"
+    "experience_level": str,        # e.g. "Junior"
+    "created_at": int(time.time()),
+    "status": "pending"             # pending → processing → completed / failed
+}
+```
+
+After pipeline starts (`analyse.py`), additional fields are added: `resume_text`, `resume_links`, `page_count`, canonicalized `company_type`.
+
+### Update Pattern
+
+```python
+def update_session(sid, updates):
+    data = redis.get(f"session:{sid}")       # Get current
+    data.update(updates)                      # Merge
+    redis.setex(f"session:{sid}", 3600, data) # Set with TTL refresh
+```
+
+### Section-Level State (for Reconnection Recovery)
+
+Each pipeline stage stores its output at:
+```
+session:{sid}:MarketContext
+session:{sid}:RedFlag
+session:{sid}:SixSecond
+session:{sid}:Competitive
+session:{sid}:TechnicalDepth
+session:{sid}:Review
+```
+
+On WebSocket reconnect, `_get_completed_sections(sid)` reads all 6 keys and re-emits `section_complete` events for completed ones.
+
+---
+
+## Analyse Route Flow (`routes/analyse.py`)
+
+### Multipart Upload → Pipeline Trigger
+
+```
+POST /api/analyse (multipart/form-data)
+│
+├── 1. Validate session exists (GET from Redis)
+│
+├── 2. Idempotency check — reject if status=processing or completed
+│
+├── 3. Anti-bot gate — reject if form filled in < 1.0s
+│
+├── 4. Rate limit check — IP-based, 3/day IST
+│   └── Token unlock override for 4th analysis
+│
+├── 5. Extract PDF
+│   ├── Content-type validation
+│   ├── PyMuPDF extract text + links
+│   ├── Validate: max 5MB, max 3 pages, min 200 chars, max 15K chars
+│   ├── Temp file → extract → unlink immediately
+│   └── track in _temp_files set for crash cleanup
+│
+├── 6. Update session → "processing"
+│
+├── 7. BackgroundTasks.add_task(_run_pipeline_and_stream, ...)
+│   └── HTTP response returns immediately
+│
+└── 8. Return {session_id, status: "processing", pages: N, chars: N}
+```
+
+### Background Pipeline Task
+
+```python
+@router.post("/api/analyse")
+async def analyse(...):
+    ...
+    background_tasks.add_task(_run_pipeline_and_stream, session_id, ...)
+    return {"session_id": session_id, "status": "processing", ...}
+```
+
+FastAPI's `BackgroundTasks` ensures the HTTP response returns immediately while the pipeline runs asynchronously in the background. The **only** way to track progress is the WebSocket.
+
+### IP Detection
+
+```python
+ip = request.headers.get("x-forwarded-for", request.client.host or "unknown")
+# x-forwarded-for handles reverse proxies (Cloud Run)
+```
+
+### Temp File Cleanup
+
+```python
+_temp_files: set[str] = set()
+atexit.register(_cleanup_temp_files)  # Clean up on crash
+```
+
+Every temp PDF file is registered for cleanup if the process crashes mid-extraction.
+
+---
+
+## WebSocket Handler Deep Dive (`routes/websocket.py`)
+
+### Message Protocol
+
+```
+Server → Client: {"event": "section_complete", "data": {"section": str, "result": dict}}
+Server → Client: {"event": "ping"}
+Client → Server: "pong"
+```
+
+### Heartbeat Loop
+
+```python
+async def heartbeat_loop(session_id, ws, interval=10):
+    while session_id in _connections:
+        await asyncio.sleep(10)
+        try:
+            await ws.send_text(json.dumps({"event": "ping"}))
+        except WebSocketDisconnect:
+            break
+```
+
+30-second receive timeout. If no message in 30s, checks if session is completed/failed and breaks.
+
+### Reconnection Recovery
+
+On WebSocket connect:
+1. Read all 6 section keys from Redis (`session:{sid}:*`)
+2. For each completed section, re-emit `section_complete` event
+3. If all 6 complete, emit `complete` event
+4. If status is `failed`, emit `error` event
+
+### Disconnect Handling
+
+```python
+except WebSocketDisconnect:
+    pass
+finally:
+    heartbeat_task.cancel()
+    _connections.pop(session_id, None)
+```
+
+Stale connections cleaned up by `cleanup_stale_connections()` after 5 minutes of inactivity.
+
+### Share Preview
+
+`GET /share/{session_id}` returns TL;DR block only (no resume text, no red flags). Cached 7 days in Redis.
+
+---
+
+## Prompt Engineering Patterns
+
+### Prompt Architecture
+
+All prompts go through `build_system_prompt()` in `agents/prompts/template.py`:
+
+1. **Base persona**: `"You are an expert resume analyst specialising in {role} at {company_type} in {market}"`
+2. **Market calibration** from DIVE (injected separately as context)
+3. **Role calibration** from `market_config.db` (role weights, company lists)
+4. **Company section**: Top 8 companies for this role+type+market (dynamically queried)
+5. **Agent-specific task**: The actual instruction for THIS agent
+6. **Universal constraints** (6 rules): generic advice ban, prompt injection resistance, JSON-only, edge cases
+7. **Token budget warning**: 3000 token limit for responses
+8. **Agent-specific constraints**: e.g., "do not contradict facts from earlier sections"
+
+### Notable Patterns
+
+**Inference Chain Enforcement** (`review_prompt.py`):
+```
+"Recruiter sees [exact observation] → assumes [specific assumption] → decides [concrete outcome]"
+```
+Quality gate checks for `→` arrow characters. Missing → triggers retry with specific instruction.
+
+**Anti-Generic Guardrails** (`red_flag_prompt.py`):
+```python
+BANNED_PHRASES = [
+    "recruiters look for", "is important to", "this shows that",
+    "lacks quantifiable", "should include metrics",
+    "demonstrates that you", "will negatively impact"
+]
+```
+Flags with >1 banned phrase are rejected at parse time.
+
+**Role-Specific Calibration** (`review_prompt.py:108-171`):
+- Fresher: judge projects/CGPA
+- Junior: judge tech depth
+- Mid: judge architectural decisions  
+- Senior: judge org impact and leadership
+
+**Company-Type-Aware Personas** (`review_prompt.py:8-105`):
+Separate hiring manager personas for: service companies, FAANG, startups, MNC GCCs, semiconductor, consulting — each with specific city references (Whitefield for GCCs, Koramangala for startups).
+
+**Anti-Hallucination Rules** (`review_prompt.py:247-253`):
+```
+- ALWAYS read the resume text before making any claim
+- NEVER say 'no mention of X' before searching
+- Every weakness claim must be VERIFIABLE against the resume text
+```
 
 ---
 
