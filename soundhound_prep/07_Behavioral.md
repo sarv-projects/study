@@ -330,6 +330,58 @@ R — Result (measurable outcome + what you learned)
 
 > "For SYNAPSE, I needed LangGraph — a framework I'd never used — to build an 8-node reasoning pipeline. I spent 2 days on the tutorial, built a minimal 2-node graph to verify my understanding, then iterated from there. Within a week, I had the full pipeline working with conditional edges and state persistence. My approach: build the smallest possible thing first, confirm it works, then expand."
 
+### "Tell us about a time you made a mistake"
+
+> "In ROAST's early version, I built the ingestion pipeline synchronously. Each market combination took 10 minutes sequentially — 70 combinations meant 10+ hours. I thought sequential was safer because I was worried about hitting API rate limits.
+>
+> The mistake was optimizing for the wrong risk. Rate limits were manageable with a simple semaphore. The real cost was time — 10 hours of waiting. When I refactored to `asyncio.gather` with a semaphore of 3, it finished in under an hour. Same work. No rate limit issues.
+>
+> **What I learned**: Start concurrent from day one. The fear of rate limits was irrational — a simple semaphore solves it. I also started adding progress logging so I could estimate completion time."
+
+### "How do you handle changing requirements?"
+
+> "During my SuperOwl internship, the founder would often add features mid-sprint — a new Slack command here, a different notification format there. At first, I'd just build whatever was asked. But that led to a messy codebase and missed deadlines.
+>
+> I started pushing back — not saying 'no,' but asking clarifying questions: 'Is this a must-have for launch or a nice-to-have?' and 'If we add this, what should we drop?' This helped the founder prioritize. We'd agree on what to defer to v2.
+>
+> The core habit I learned: when requirements change, update the plan first — don't just start coding the new thing. Write down the change, estimate effort, negotiate scope."
+
+### "Explain a technical concept to a non-technical person"
+
+> **Scenario**: In the SuperOwl internship, the business founder didn't understand why some calls had a delay before the AI assistant responded.
+>
+> **My explanation**: 'Imagine you're calling a business. The receptionist needs to check a binder to find who handles your type of request, then read a script before answering. That lookup takes time. Our system does the same thing — it needs to figure out who you're calling, pull up their settings, and build the right script. The delay is the lookup time.'
+>
+> **Why it worked**: Instead of talking about VAPI webhooks, ANI resolution, or 7.5-second timeouts, I used an analogy the founder already understood — how a real receptionist works. The latency wasn't a bug; it was research time."
+
+### "Tell us about a time you took initiative beyond your role"
+
+> "During my SuperOwl internship, my main deliverable was the voice AI platform. But I noticed the team didn't have a testing strategy — every deployment was manual, and regressions were common.
+>
+> No one asked me to fix this. But I spent evenings building a test suite: unit tests for the storage layer, integration tests for the VAPI webhook flow, and a local Firestore emulator setup. I also added GitHub Actions for CI.
+>
+> The impact: deployment confidence went up. We caught two regressions before they hit production in the first week alone. The founder noticed and started requiring tests for every new endpoint.
+>
+> **The lesson**: Initiative isn't about doing extra work. It's about seeing a problem and fixing it without waiting for permission."
+
+### "Why ECE and not Computer Science?"
+
+> "I chose ECE because I was interested in AI and building intelligent systems. In my first year, I started exploring machine learning on my own — Andrew Ng's course, building small models, understanding how neural networks work. By second year, I was building production AI systems.
+>
+> The degree label didn't matter. What mattered was that I was building — voice AI pipelines, multi-agent systems, production backends. ECE gave me the engineering foundation; I built the AI expertise myself through projects and deployment experience.
+>
+> Actually, my ECE background helped in unexpected ways — signal processing concepts transferred directly to understanding voice AI pipelines. The core skills I use daily (Python, APIs, system design) are things I learned building projects, not in a classroom."
+
+### "What do you know about our competitors?"
+
+> "The main players in enterprise conversational AI are Amelia, Kore.ai, Nuance (Microsoft), Google Contact Center AI, and AWS Connect.
+>
+> What sets SoundHound apart is **Speech-to-Meaning** — instead of the traditional ASR → NLU pipeline where errors cascade from one stage to the next, Amelia goes directly from audio to meaning. This is fundamentally different from how Google or AWS approach it.
+>
+> The **Agentic+ framework** is also unique — most competitors still rely on rigid dialogue trees or basic LLM wrappers. Amelia's three-layer architecture (Entities → Cognitive Functions → AI Agents) with dynamic orchestration is ahead of what Kore.ai or Nuance offer.
+>
+> And **OASYS** is new — being model-agnostic means enterprises aren't locked into one LLM. Competitors typically force you into their ecosystem."
+
 ---
 
 ## 12. Your 3 Questions to Ask
