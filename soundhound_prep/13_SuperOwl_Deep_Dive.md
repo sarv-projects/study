@@ -17,52 +17,35 @@ A multi-tenant voice AI platform where businesses automate customer phone calls.
 
 ```mermaid
 flowchart TB
-    subgraph External["External Services"]
-        VAPI["VAPI<br/>Telephony + Speech + AI"]
-        GROQ["Groq<br/>llama-3.3-70b<br/>Summarization"]
-        GEMINI["Gemini<br/>gemini-2.5-flash-lite<br/>KB → Prompt"]
-        NANGO["Nango<br/>Slack OAuth"]
-        FCM["Firebase Cloud Messaging<br/>Push Notifications"]
-        FIREBASE["Firebase Auth<br/>ID Token Validation"]
-    end
+    Phone["📞 Customer calls business number"] --> VAPI
     
-    subgraph Backend["FastAPI Backend"]
-        MAIN["main.py<br/>13 routers, CORS, ngrok detect"]
-        CS["call_session.py<br/>Inbound lifecycle"]
-        CE["call_events.py<br/>Transcript + End-of-call"]
-        CO["call_orchestrator.py<br/>Outbound calls"]
-        OF["owner_flow.py<br/>Owner escalation"]
-        PB["prompt_builder.py<br/>3-mode engine"]
-        VS["vapi_service.py<br/>VAPI HTTP client"]
-        SS["slack_service.py<br/>Slack Block Kit"]
-        FS["fcm_service.py<br/>Push notifications"]
-        GS["groq_service.py<br/>Summarization"]
-        GMS["gemini_service.py<br/>KB → prompt"]
-        WP["webhook_parser.py<br/>SIP header parsing"]
-        ST["storage.py<br/>Dual-mode facade"]
-    end
+    VAPI["☁️ VAPI — Answers call, sends webhooks"] --> ENTRY
     
-    subgraph Storage["Storage"]
-        FIRESTORE[("Firestore<br/>6 collections")]
-        JSON[("JSON Files<br/>data/*.json")]
-    end
+    ENTRY["1. Entry: main.py<br/>Routes requests to the right handler"] --> CALLS
     
-    subgraph Mobile["React Native Android"]
-        APP["App.js<br/>FCM + Live Call Overlay"]
-        WS["WebSocket Hook<br/>Live transcript"]
-        SIM["SimInfo Module<br/>Dual-SIM"]
-        LCF["LiveCallService<br/>Foreground Service"]
-    end
+    CALLS["2. Call Handling<br/>call_session.py: Who is this call for?<br/>call_events.py: Handle transcript + end-of-call<br/>call_orchestrator.py: Make outbound calls"] --> AI
     
-    Phone["Customer Phone"] --> VAPI
-    VAPI -->|"HTTP Webhook"| Backend
-    Backend --> Storage
-    Backend --> External
-    Mobile -->|"REST API"| Backend
-    Mobile -->|"WebSocket"| Backend
-    Backend -->|"Push"| FCM
-    FCM --> Mobile
+    AI["3. AI & Prompts<br/>prompt_builder.py: Build AI personality<br/>groq_service.py: Summarize calls<br/>gemini_service.py: KB→prompt"] --> INT
+    
+    INT["4. Integrations<br/>slack_service.py: Send to Slack<br/>fcm_service.py: Push notifications<br/>owner_flow.py: Escalate to human"] --> STORE
+    
+    STORE["5. Storage<br/>storage.py → Firestore (prod) or JSON files (dev)"]
+    
+    INT -->|"Push"| FCM["☁️ Firebase Cloud Messaging"]
+    FCM --> APP["📱 Mobile App"]
+    INT -->|"Update"| SLACK["👤 Owner's Slack"]
+    
+    APP -->|"REST + WebSocket"| CALLS
 ```
+
+**In plain English:**
+1. Customer calls business number → VAPI answers and sends us a webhook
+2. `main.py` receives it → routes to `call_session.py`
+3. `call_session.py` figures out which business this is for, loads their config
+4. `prompt_builder.py` creates the AI's personality for this specific call
+5. AI talks to customer; transcripts flow to mobile, Slack, and push notifications
+6. After call: `groq_service.py` summarizes what happened
+7. If AI needs help: `owner_flow.py` escalates to the business owner
 
 ---
 
@@ -220,14 +203,14 @@ VAPI:       Purpose-built for AI voice agents. Provides websocket for streaming
             Free tier: 5 concurrent calls, enough for MVP.
 ```
 
-**Why 5-layer ANI resolution?**
+**Why 3-layer ANI resolution?**
 ```python
-# Layer 1: SIP Diversion header (caller's original number)
-# Layer 2: SIP From/To headers (PBX-level identifiers)
-# Layer 3: In-memory phone→business map (hot cache)
-# Layer 4: Firestore query by business phone
-# Layer 5: Firestore query by owner's personal number
+# Layer 1: Diversion SIP header → phone_map (exact match, then last 10 digits)
+# Layer 2: Other SIP headers → phone_map (extract phone numbers via regex)
+# Layer 3: Direct DB lookup by Diversion ANI (fallback)
 ```
+
+**Note**: The README says "5 layers" but actual code has 3 routing layers. The Firestore `get_user_profile_by_phone()` internally does 5 matching attempts (exact → +91 prefix → without +91 → raw 10-digit → full scan), but the ANI routing itself resolves in 3 layers. The study guide has been corrected to match.
 
 Each layer exists because SIP headers are unreliable:
 - Some carriers pass Diversion header, some don't
@@ -253,6 +236,8 @@ VAPI's fixed webhook timeout is 7.5s. This dictated the entire architecture:
 
 This is the CRITICAL path. Understand every step.
 
+**Call Flow — Phase 1: Inbound Setup (7.5s timeout)**
+
 ```mermaid
 sequenceDiagram
     participant C as Customer
@@ -261,18 +246,12 @@ sequenceDiagram
     participant CS as call_session.py
     participant PB as prompt_builder.py
     participant ST as storage.py
-    participant SS as slack_service.py
-    participant FS as fcm_service.py
-    participant CE as call_events.py
-    participant GS as groq_service.py
-    participant WS as ws_live_call.py
-    participant M as Mobile App
     
     C->>V: Dial business number
     V->>WH: POST /vapi-webhook (assistant-request)
+    Note over WH,ST: Must respond within 7.5 seconds
     
     WH->>CS: handle_assistant_request(payload)
-    
     CS->>CS: Step 1: Parse ANI (5-layer resolution)
     CS->>ST: Step 2: Load business config by phone
     ST-->>CS: Business profile + settings
@@ -282,33 +261,67 @@ sequenceDiagram
     PB->>PB: Render template with variables
     PB-->>CS: System prompt + welcome message
     
-    CS->>CS: Step 4: Configure features (recording, transfer, whisper)
+    CS->>CS: Step 4: Configure features
     CS->>CS: Step 5: Build VAPI assistant overrides
     
     CS-->>WH: Return assistantId + overrides
     WH-->>V: HTTP 200 (within 7.5s)
-    
     V->>C: "Welcome to ABC Clinic..."
+```
+
+**Call Flow — Phase 2: Async Notifications (fire-and-forget after response)**
+
+```mermaid
+sequenceDiagram
+    participant CS as call_session.py
+    participant SS as slack_service.py
+    participant FS as fcm_service.py
+    participant ST as storage.py
     
     par Fire-and-forget (async)
         CS->>SS: Slack: "Live call from +91..."
-        CS->>FS: FCM: "Incoming call"
+        CS->>FS: FCM: "Incoming call" push
         CS->>ST: Create call_log + session
     end
+```
+
+**Call Flow — Phase 3: Live Transcript Streaming**
+
+```mermaid
+sequenceDiagram
+    participant V as VAPI
+    participant WH as vapi_webhook.py
+    participant CE as call_events.py
+    participant WS as ws_live_call.py
+    participant SS as slack_service.py
+    participant FS as fcm_service.py
     
-    loop Every utterance
+    loop Every utterance during call
         V->>WH: transcript event
         WH->>CE: handle_transcript(payload)
         CE->>WS: Broadcast via WebSocket
-        CE->>SS: Stream to Slack thread (throttled)
-        CE->>FS: FCM update (1.5s throttle)
+        CE->>SS: Stream to Slack thread (throttled 1.5s)
+        CE->>FS: FCM update (throttled 1.5s)
     end
+```
+
+**Call Flow — Phase 4: End-of-Call Processing**
+
+```mermaid
+sequenceDiagram
+    participant V as VAPI
+    participant WH as vapi_webhook.py
+    participant CE as call_events.py
+    participant GS as groq_service.py
+    participant ST as storage.py
+    participant FS as fcm_service.py
+    participant SS as slack_service.py
     
     V->>WH: end-of-call-report
     WH->>CE: handle_end_of_call_report(payload)
-    CE->>GS: Summarize transcript
+    CE->>GS: Summarize transcript via Groq
     GS-->>CE: Summary text
-    CE->>CE: Classify outcome
+    CE->>CE: Classify outcome (resolved/escalated/failed)
     CE->>ST: Save call_log (summary, outcome, credits)
     CE->>FS: FCM: "Call ended" + summary
     CE->>SS: Slack: final summary + action buttons
@@ -539,11 +552,157 @@ async def post_call_setup(business, call_id, caller_phone):
 
 ---
 
+## Outbound Call Flow — Mobile-Triggered AI Calls
+
+### Design Reasoning
+
+**Why outbound calls are different from inbound?**
+```
+Inbound:  VAPI webhook → 7.5s timeout → ANI resolution → config → response
+Outbound: Mobile app POST → trigger API → build config → VAPI create_call() → initiate
+
+Key differences:
+- No ANI resolution needed (customer number is known from the form)
+- No 7.5s timeout (VAPI create_call API is async)
+- Business mode only (no personal/hybrid — this is always business-initiated)
+- Polling-based transcript on mobile (not WebSocket — simpler for outbound)
+```
+
+**Why polling instead of WebSocket for outbound?** Outbound calls are simpler — the mobile app shows transcript updates via 2s polling, not real-time WebSocket. This avoids the complexity of managing WebSocket connections for short outbound calls. Tradeoff: 2s latency vs real-time, but acceptable for "info gathering" use case.
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant M as Mobile App
+    participant API as FastAPI
+    participant CO as call_orchestrator.py
+    participant PB as prompt_builder.py
+    participant V as VAPI
+    participant ST as storage.py
+    
+    M->>API: POST /trigger/outbound {uuid, customer_name, customer_phone}
+    API->>CO: trigger_outbound_callback()
+    CO->>PB: build_system_prompt(is_outbound=True)
+    PB-->>CO: System prompt + welcome greeting
+    CO->>CO: Build tool configs (notify_owner + endCall)
+    CO->>V: create_call() or create_call_from_assistant_id()
+    V-->>CO: {id: vapi_call_id}
+    CO->>ST: Create call_log (call_type="outbound")
+    CO->>ST: Store session (vapi_call_id → uuid)
+    CO-->>API: {call_log_id, vapi_call_id, status: "initiated"}
+    API-->>M: {id, vapi_call_id, status}
+    
+    par Async notifications
+        CO->>Slack: Live call notification
+        CO->>FCM: live_outbound_call push
+    end
+    
+    loop Every 2s (mobile polling)
+        M->>API: GET /call-logs/{call_log_id}
+        API->>ST: Get call_log
+        ST-->>API: {transcript, outcome, duration}
+        API-->>M: Updated state
+    end
+```
+
+### Outbound Tool Building (`call_orchestrator.py`)
+
+The orchestrator builds VAPI tool configs dynamically:
+
+```python
+def _build_notify_owner_tool():
+    """Tool: notify owner when AI needs human help."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "notify_owner",
+            "parameters": {
+                "customer_name": {"type": "string"},
+                "call_summary": {"type": "string"},
+                "lead_reason": {"type": "string"}
+            }
+        },
+        "server": {"url": f"{base_url}/vapi-webhook/notify-owner"}
+    }
+
+def build_outbound_tools(features):
+    tools = []
+    if features.get("callTransfer", True):
+        tools.append(_build_notify_owner_tool())  # Only if feature enabled
+    tools.append({"type": "endCall"})  # Always present
+    return tools
+```
+
+**Outbound assistant config** follows VAPI's inline model format:
+```python
+assistant_config = {
+    "firstMessage": welcome_greeting,
+    "silenceTimeoutSeconds": 45,
+    "model": {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "system", "content": system_prompt}],
+        "tools": call_tools,
+    },
+    "serverMessages": ["transcript", "hang", "end-of-call-report", "function-call"],
+    "endCallFunctionEnabled": True,
+    "monitorPlan": {"listenEnabled": False, "controlEnabled": True},
+}
+```
+
+**Two deployment paths**:
+1. `VAPI_OUTBOUND_ASSISTANT_ID` set → uses `create_call_from_assistant_id()` with overrides (dashboard-managed assistant)
+2. Not set → uses `create_call()` with full inline config (self-contained, no dashboard dependency)
+
+### OutboundLiveScreen (`mobile/OutboundLiveScreen.js`)
+
+The mobile screen for live outbound calls:
+
+| Feature | Implementation |
+|---------|---------------|
+| **Status** | "Calling..." → "Live Call" → "Call Completed" |
+| **Transcript** | Polls `GET /call-logs/{id}` every 2s, parses `"Role: Message"` format |
+| **Duration** | Live counter from `duration_seconds` field |
+| **End Call** | `POST /mobile/calls/{callId}/end` → `navigation.goBack()` |
+| **Auto-navigate** | When `outcome` is set, shows "Call Completed" for 3s then navigates to MissedSummary |
+
+```javascript
+// Polling loop
+useEffect(() => {
+  const interval = setInterval(async () => {
+    const result = await callLogAPI.getCallLog(vapiCallId);
+    if (result.data.outcome) {
+      setStatus("completed");
+      setTimeout(() => navigation.navigate("MissedSummary"), 3000);
+    }
+  }, 2000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+**Key bug**: End Call navigates back without waiting for the API response — the call might not actually end.
+
+---
+
 ## Transcript Streaming Flow
 
 ### Design Reasoning
 
 **Why WebSocket + Slack + FCM in parallel?**
+
+```mermaid
+flowchart TB
+    V["VAPI sends transcript event"] --> WH["vapi_webhook.py receives it"]
+    WH --> CE["call_events.py<br/>handle_transcript()"]
+    CE --> NORM["Normalize role + clean text"]
+    NORM --> APPEND["Append to call_log transcript"]
+    NORM --> WS_B["WebSocket Broadcast<br/>ws_live_call.py → Mobile App"]
+    NORM --> FCM_THR["FCM (throttled 1.5s)<br/>fcm_service.py → Push notification"]
+    NORM --> SLACK["Slack (unthrottled)<br/>slack_service.py → Thread update"]
+```
+
+Three consumers for the SAME transcript:
 ```
 Three consumers for the SAME transcript:
 1. WebSocket: Mobile app live view (user-facing)
@@ -638,6 +797,32 @@ async def handle_transcript(payload):
 ---
 
 ## End-of-Call Processing
+
+```mermaid
+flowchart TB
+    V["VAPI sends end-of-call-report"] --> WH["vapi_webhook.py receives it"]
+    WH --> CE["call_events.py<br/>handle_end_of_call_report()"]
+    CE --> PA["Is this an owner PA call ending?"]
+    PA -->|"Yes"| PA_UN["Unblock customer call<br/>Inject 'team unavailable' message"]
+    PA -->|"No"| DEDUP["Already summarized?"]
+    DEDUP -->|"Yes"| EXIT["Return: already_processed"]
+    DEDUP -->|"No"| OUTCOME["Detect outcome from endedReason"]
+    OUTCOME --> TRANSF["transferred" ]
+    OUTCOME --> RESOLV["resolved"]
+    OUTCOME --> TIMEOUT["timeout"]
+    OUTCOME --> ABAND["abandoned"]
+    TRANSF --> CLEAN["Clean transcript<br/>Remove short lines, timestamps"]
+    RESOLV --> CLEAN
+    TIMEOUT --> CLEAN
+    ABAND --> CLEAN
+    CLEAN --> GROQ["Groq summarization<br/>llama-3.3-70b<br/>'Customer wanted... What happened... Follow-up'"]
+    GROQ --> PERSIST["Save to call_log<br/>duration, outcome, transcript, summary, credits"]
+    PERSIST --> WS_END["WebSocket: broadcast call_ended"]
+    WS_END --> FCM_END["FCM: call_ended_native (dismiss HUD)"]
+    FCM_END --> FCM_SUM["FCM: call_ended_summary (missed calls)"]
+    FCM_SUM --> SLACK_END["Slack: mark_call_completed + outcome badge"]
+    SLACK_END --> CLEANUP["Delete session, remove FCM throttle"]
+```
 
 ```python
 async def handle_end_of_call_report(payload):
@@ -867,6 +1052,16 @@ async def handle_owner_decision(payload):
 ---
 
 ## WebSocket Live Call (`ws_live_call.py`)
+
+```mermaid
+flowchart TB
+    APP["Mobile App opens WebSocket"] --> CONN["Connect to /ws/live-call/{callLogId}"]
+    CONN --> HANDSHAKE["Send: { last_seq: N }<br/>(N = last sequence received)"]
+    HANDSHAKE --> CATCHUP["Server replays missed messages<br/>from buffer (max 200)"]
+    CATCHUP --> LIVE["Live mode: receive transcript_chunk"]
+    LIVE --> DISCON["Disconnect (call ended / timeout)"]
+    DISCON --> CLEANUP["Server cleans up buffer + connection"]
+```
 
 ```mermaid
 sequenceDiagram
@@ -1148,7 +1343,152 @@ const CallForwardingScreen = () => {
 
 ---
 
+### BizDetailScreen — Business Discovery & Outbound Trigger
+
+A 3-in-1 screen file (`BizDetailScreen.js`, 800 lines):
+
+**A) BizDetailScreen** — Shows business info + AI Call CTA:
+```
+┌──────────────────────────────┐
+│  [Business Image Header]     │
+│  Troy Fun Center        4.8★│
+│  (242 reviews)    Open now   │
+│  📞 +91 88866 00480         │
+│                              │
+│  [Chat] [Compare] [Map]      │  ← 3 link buttons
+│                              │
+│  📞 Let AI call for you      │
+│  FREE · 2 calls remaining    │
+│  [🎯 AI Knowledge Base]      │
+│  └─ expandable KB preview    │
+│                              │
+│  ┌──────────────────────┐   │
+│  │ 📞 AI Call — Free    │   │
+│  └──────────────────────┘   │
+└──────────────────────────────┘
+```
+
+**Known issue**: Chat, Compare, Map buttons have no `onPress` handlers — tap does nothing.
+
+**B) CallTypeScreen** — Select call mode:
+```
+"How should AI handle your call?"
+○ Information only — "Gather pricing, availability, details"
+● Auto (Smart) — "Books if price matches budget" ★ RECOMMENDED
+○ Negotiation focus — "AI tries to get best price"
+○ Booking — "Completes the booking then shows summary"
+[Continue with Auto (Smart) →]
+```
+
+**C) CallFormScreen** — Trigger the outbound call:
+```javascript
+const CallFormScreen = ({ route, navigation }) => {
+    const [customerName, setCustomerName] = useState('');
+    const [chatSummary, setChatSummary] = useState('');
+    
+    const startCall = async () => {
+        const response = await triggerAPI.outboundCall({
+            uuid: profile.uuid,
+            customer_name: customerName,
+            customer_phone: business.owner_no,
+            chat_summary: chatSummary,
+        });
+        navigation.navigate('OutboundLive', {
+            vapiCallId: response.vapi_call_id,
+            callLogId: response.id,
+        });
+    };
+};
+```
+
+### ConfigureAssistantScreen — AI Settings (820 lines)
+
+| Setting | Type | Options | Notes |
+|---------|------|---------|-------|
+| **Assistant Name** | TextInput | Free text | Default: "Roo" |
+| **Voice** | Dropdown | Priya / Arjun | Stored but **never sent to VAPI** (bug) |
+| **Response Language** | Dropdown | English / Hindi | Read but **never consumed** (dead code) |
+| **Mode** | Radio | Business / Business+Personal | `business_prompt_mode` |
+| **Greeting Message** | Multiline | Template text | Different for business vs personal |
+| **Prompt Instructions** | Multiline | Max 250 chars (personal) | Personal instructions |
+| **Call Recording** | Toggle | On/Off | −5 credits/call |
+| **Call Transfer** | Toggle | On/Off + conditions | −5 credits/call. Shows Transfer Conditions textarea |
+| **Take Over** | Toggle | On/Off | −5 credits/call |
+| **Whisper** | Toggle | On/Off | −5 credits/call |
+| **End Call** | Toggle | On (FREE) | Always free, always available |
+
+**Transfer Conditions** (editable when Call Transfer enabled):
+```
+- Caller explicitly asks to speak with a person
+- Caller sounds distressed or urgent
+- Caller mentions payment, refund or complaint
+- Caller has been on hold more than 2 minutes
+```
+
+---
+
+### AppState.js — Global State Management
+
+**Pattern**: React Context + `useState` + `useMemo` (no Redux, no Zustand).
+
+```javascript
+const defaultState = {
+    onboardingCompleted: false,
+    phone: '',
+    name: 'Hari',
+    voiceId: 'priya',
+    mode: 'personal',
+    businessPromptMode: 'personal_business',
+    selectedPlan: 'starter',
+    hasFeedActivity: false,
+    forwarding: { missedCalls: true, unreachable: true, busy: false, allCalls: false },
+    businesses: [],
+    liveNotifications: [],       // Last 30
+    activeCalls: {},             // { callId: { id, caller, business, uuid, type, lastSnippet } }
+    completedCalls: [],          // Last 50
+    notificationsEnabled: null,
+    simSubId: null, simSlotIndex: null, simIccId: null, simCarrier: null,
+};
+```
+
+**Notification flow** (`addLiveNotification`):
+```
+live_inbound_call / live_outbound_call → activeCalls[callId] = { status: 'ringing' }
+transcript_update → activeCalls[callId].lastSnippet = text, status = 'live'
+call_ended_native → remove from activeCalls, create feed card if missed
+call_ended_summary → remove from activeCalls, create summary card with actions
+```
+
+**Profile persistence**: On Firebase auth state change → load profile from `GET /mobile/profile/{uid}` → merge into AppState. Re-fetches on app foreground (catches dashboard-side updates).
+
+**Auth integration**: `firebase.auth().onAuthStateChanged()` → sets `firebaseUid`, stores in native SharedPreferences for FCM targeting.
+
+---
+
 ## Slack Integration — Complete
+
+```mermaid
+flowchart TB
+    CS["call_session.py: Call connected"] --> NOTIF["send_live_call_notification()"]
+    NOTIF --> BLOCK["Build Block Kit message<br/>Header + customer info + transcript area"]
+    BLOCK --> SEND["Post to Slack channel"]
+    
+    CE["call_events.py: New transcript"] --> STREAM["stream_transcript_chunk()"]
+    STREAM --> THREAD["Post to Slack thread (per-line)"]
+    STREAM --> UPDATE["Update main message (last 8 lines)"]
+    
+    CE_END["call_events.py: Call ended"] --> COMPLETE["mark_call_completed()"]
+    COMPLETE --> BADGE["Add outcome badge: ✅/🔀/⏱️/❌"]
+    COMPLETE --> SUMMARY["Add AI Summary section"]
+    
+    OWN["owner_flow.py: Escalation needed"] --> APPROVE["send_owner_approval_request()"]
+    APPROVE --> BTN["Add buttons: Take Over / Decline"]
+    BTN --> WAIT["Wait for button click webhook"]
+    
+    SLASH["Slash command: /superowl-whisper"] --> WHIS["Send whisper text to AI"]
+    SLASH_END["/superowl-end"] --> END_CALL["End the VAPI call"]
+    SLASH_XFER["/superowl-transfer"] --> XFER["Transfer to business rep"]
+```
 
 ### slack_service.py — Block Kit Notifications
 
@@ -1333,6 +1673,17 @@ async def slack_actions(request: Request):
 
 ## Billing System
 
+```mermaid
+flowchart TB
+    START["Call starts"] --> CALC["Calculate: duration_seconds / 6 = credits_used"]
+    CALC --> MIN["Minimum: 1 credit per call"]
+    MIN --> SAVE["Save credits_used to call_log"]
+    SAVE --> BALANCE["Deduct from user's credit balance"]
+    BALANCE --> CHECK["Balance < 5 remaining?"]
+    CHECK -->|"Yes"| WARN["Send low-balance warning to user"]
+    CHECK -->|"No"| DONE["Done"]
+```
+
 ```python
 # billing.py
 PLANS = {
@@ -1403,15 +1754,274 @@ async def generate_business_prompt(knowledge_base_text):
 
 ---
 
+## Session Lifecycle — Create, Maintain, Destroy
+
+### Session Creation
+
+Sessions are stored per `vapi_call_id` when a call starts:
+
+| Trigger | File | Session Key | Data |
+|---------|------|-------------|------|
+| Inbound call (assistant-request) | `call_session.py` | `vapi_call_id` | `{uuid, customer_phone}` |
+| Outbound call (trigger) | `call_orchestrator.py:286` | `vapi_call_id` | `{uuid, customer_phone, owner_call_triggered, owner_call_id, call_start_time}` |
+| Owner PA call | `owner_flow.py` | `owner_vapi_call_id` | `{customer_call_id}` (maps PA→customer) |
+
+### Session Data (Firestore or JSON)
+
+```python
+session = {
+    "uuid": str,                    # Tenant identifier
+    "customer_phone": str,
+    "owner_call_triggered": bool,   # Whether a PA call was made
+    "owner_call_id": str | None,    # VAPI call ID of the PA leg
+    "owner_decision_made": bool,    # Dedup: owner already decided
+    "owner_call_failed": bool,      # PA call could not connect
+    "call_start_time": float,       # time.time()
+}
+```
+
+### Session Cleanup Triggers
+
+| Trigger | File | Action |
+|---------|------|--------|
+| **End-of-call report** | `call_events.py:411` | `delete_session(vapi_call_id)`, remove FCM throttle entry |
+| **Owner PA call ends** | `call_events.py:325` | `delete_session(owner_vapi_call_id)` |
+| **Hold music cancelled** | `call_session.py:142` | Cancel asyncio Event, stop 20s loop |
+| **FCM throttle stale** | `call_session.py:149` | Remove entries older than 30 min (`FCM_THROTTLE_MAX_AGE_S=1800`) |
+
+### Session State Machine
+
+```mermaid
+flowchart TB
+    PENDING["pending<br/>Call initiated"] --> ACTIVE["active<br/>Call connected, AI talking"]
+    ACTIVE --> ESCALATE["owner_call_triggered<br/>AI escalated to human"]
+    ACTIVE --> ENDING["end-of-call-report<br/>Call ended normally"]
+    ESCALATE --> WAITING["Hold music playing<br/>Waiting for owner decision"]
+    WAITING --> YES["owner_decision = yes<br/>SIP transfer customer to owner"]
+    WAITING --> NO["owner_decision = no<br/>Say & end call"]
+    WAITING --> FAIL["owner_call_failed<br/>Inject 'team unavailable'"]
+    YES --> DONE["Call transferred"]
+    NO --> DONE["Call ended"]
+    FAIL --> DONE["Call ended"]
+    ENDING --> CLEANUP["Cleanup<br/>Delete session, remove throttle"]
+```
+
+---
+
+## Multi-Tenant Isolation — Architecture
+
+```mermaid
+flowchart TB
+    subgraph Firestore["Firestore Database"]
+        UP["user_profiles/{firebase_uid}<br/>── phone, name, mode<br/>── business: { display_name, kb, ... }"]
+        CL["call_logs/{id}<br/>── uuid (tenant key)<br/>── transcript, summary, outcome"]
+        SS["sessions/{vapi_call_id}<br/>── uuid (tenant key)<br/>── call state"]
+        PM["phone_map/{phone}<br/>── user_id<br/>Used for inbound call routing"]
+    end
+    
+    CALL["Inbound call arrives"] --> PM
+    PM --> UP
+    USER["Mobile app logged in"] --> UP
+    UP --> CL
+```
+
+### Design Pattern: Nested Profile
+
+SuperOwl uses a **nested business profile under user_profiles** pattern — NOT separate databases or collections per tenant.
+
+```
+Firestore: user_profiles/{firebase_uid}
+├── phone, name, mode, firebase_uid     ← User-level fields
+├── business_exists: true/false
+├── business: {                          ← Nested sub-object
+│     id, display_name, owner_no,
+│     kb, features, nango_connection_id,
+│     slack_channel, ...                ← All business settings
+│   }
+├── sims/ (subcollection)               ← Per-user SIMs
+└── created_at, updated_at
+
+Separate collections (shared across all tenants):
+  call_logs/{id}          ← filtered by uuid field
+  sessions/{vapi_call_id} ← filtered by uuid field
+  phone_map/{phone}       ← maps phone → user_id
+  notifications/{id}      ← filtered by uuid
+```
+
+### Isolation Mechanisms
+
+| Mechanism | How It Works | Risk if Broken |
+|-----------|-------------|----------------|
+| **Firestore query filter** | All queries include `.where("uuid", "==", uid)` | One tenant could see another's call logs |
+| **Firebase Auth UID as key** | `user_profiles/{uid}` doc ID = Firebase Auth UID | Auth token must match — Firestore security rules enforce this |
+| **Business = 1:1 with user** | One user can have at most one business profile | No multi-business-per-user support |
+| **Phone map as routing table** | Inbound call resolution uses `phone_map → user_id` | If phone_map is corrupted, calls route to wrong business |
+
+### Key Limitation
+
+A tenant is synonymous with a Firebase Auth user. Two businesses owned by the same person share the same `uuid` — they are NOT isolated from each other. The architecture assumes one business per user account.
+
+---
+
+## Agentic Design — Tool Calling Architecture
+
+### How the AI Decides to Escalate
+
+The system prompt defines specific conditions for tool calls:
+
+```python
+# From BASE_PROMPT — notify_owner conditions:
+"""
+- Caller asks to speak to owner or another person
+- Caller is angry, frustrated, or threatening
+- Caller asks about pricing beyond your knowledge
+- Caller requests a callback (you MUST NOT end the call)
+- You are stuck or don't know how to handle the situation
+
+When ANY of these conditions are met:
+  → Call the notify_owner function immediately
+  → Provide a clear summary of why you're notifying
+
+NEVER notify the owner for:
+- Simple questions you CAN answer
+- Spam or telemarketing calls
+- Wrong numbers
+"""
+```
+
+This is **not a hardcoded if/else** — the LLM reads these conditions and decides whether to call the tool. The agentic behavior comes from the LLM's reasoning, not a state machine.
+
+### Tool Architecture
+
+Two tools are available to the AI:
+
+**1. `notify_owner`** — Escalate to human:
+```python
+{
+    "name": "notify_owner",
+    "parameters": {
+        "customer_name": "string (required)",   # Used in Slack notification
+        "call_summary": "string (required)",     # Shown to owner for context
+        "lead_reason": "string (required)",      # Why escalation is needed
+    },
+    "server": {
+        "url": "{base_url}/vapi-webhook/notify-owner"  # Webhook called when tool is invoked
+    }
+}
+```
+
+**2. `endCall`** — End the conversation:
+```python
+{"type": "endCall"}
+```
+
+### How Tool Calling Flows
+
+```mermaid
+sequenceDiagram
+    participant AI as AI Assistant (LLM)
+    participant V as VAPI
+    participant WH as webhook
+    participant OF as owner_flow.py
+    
+    AI->>AI: Reads prompt conditions
+    AI->>AI: Decides: "This needs human help"
+    AI->>V: output: tool call notify_owner
+    V->>WH: POST /vapi-webhook/notify-owner
+    WH->>OF: handle_notify_owner()
+    OF->>OF: Check escalation mode
+    OF->>OF: Create PA call to owner
+    OF->>OF: Start hold music loop
+    V->>AI: "Please hold while I check..."
+```
+
+### Owner PA Assistant — A Second AI Agent
+
+When the owner receives a PA call, a **separate AI agent** handles the conversation:
+
+```python
+PA_PROMPT = """You are calling to report about a customer call.
+Your job is to briefly summarize the situation and ask if they can take the call.
+If they say yes → call report_decision(yes)
+If they say no → call report_decision(no)"""
+
+PA_TOOLS = [{
+    "type": "function",
+    "function": {
+        "name": "report_decision",
+        "parameters": {
+            "decision": {"type": "string", "enum": ["yes", "no"]}
+        }
+    },
+    "server": {"url": "{base_url}/vapi-webhook/owner-decision"}
+}]
+```
+
+This is a **two-agent system**: Roo (customer-facing) and PA (owner-facing). They operate independently — Roo holds while PA asks the owner. When PA gets a decision, it triggers the webhook which resumes Roo's flow.
+
+### Escalation Decision Tree
+
+```mermaid
+flowchart TD
+    AI["AI detects escalation condition"] --> CHECK["Check owner_check_method"]
+    
+    CHECK -->|"slack"| SLACK["Send Slack approval request<br/>with buttons: Take Over / Decline"]
+    CHECK -->|"call"| PA["Create PA call to owner<br/>with report_decision tool"]
+    CHECK -->|"both"| BOTH["Try Slack first<br/>fallback to call after N seconds"]
+    
+    SLACK -->|"Take Over"| TRANSFER["SIP transfer customer to owner"]
+    SLACK -->|"Decline"| SAYEND["AI says: 'They're unavailable'<br/>continues or ends"]
+    
+    PA -->|"yes"| TRANSFER
+    PA -->|"no"| SAYEND
+    PA -->|"failed/no answer"| PA_FAIL["Inject 'team unavailable' message"]
+    
+    TRANSFER --> DONE["Call transferred"]
+    SAYEND --> DONE
+```
+
+---
+
+## Firebase Cloud Function (`functions/index.js`)
+
+A minimal HTTP-triggered function that mirrors inbound call data into Firestore:
+
+```javascript
+exports.onInboundCall = functions.https.onRequest(async (req, res) => {
+    const { businessId, callId, callerNumber, summary, transcript, status, uuid, customer_phone } = req.body;
+    
+    if (!uuid || !callId) {
+        res.status(400).send({ error: "Missing uuid or callId" });
+        return;
+    }
+    
+    // Upsert to Firestore: call_logs/{callId}
+    await db.collection('call_logs').doc(callId).set({
+        uuid, customer_phone, summary, transcript, status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    res.json({ status: "ok" });
+});
+```
+
+**Purpose**: Provides a Firebase-side mirror of inbound call data. The primary call processing happens in the FastAPI backend. Notification creation is **disabled** here because the backend handles it with richer metadata.
+
+---
+
 ## Known Issues (From Code Audit)
 
-| Issue | Severity | Location | Fix |
-|-------|----------|----------|-----|
-| `get_user_profile_by_phone()` doesn't exist in json_storage | Critical | json_storage.py:176 | Implement the function |
-| `voice_id` stored but never sent to VAPI | Medium | call_session.py | Add to assistantOverrides |
-| Multiple mobile buttons dead (Cancel Call, End Call) | Medium | mobile screens | Wire up event handlers |
-| Hardcoded keystore password | Security | build.gradle | Move to env var |
-| `showIntent` variable never set to true | Low | FeedScreen.js | Wire intent display |
+These are bugs found by cross-referencing the study guide against actual source files. Be honest about these if asked in interviews.
+
+| Issue | Severity | Location | What's Wrong |
+|-------|----------|----------|-------------|
+| **Voice ID never applied** | Medium | `call_session.py:670` | `voice_id` (Priya/Arjun) read from profile but never set in `assistantOverrides`. Stored but invisible to VAPI. |
+| **response_language dead code** | Low | `call_session.py:667` | Read from profile but never injected into prompt or VAPI config. |
+| **Recording flag asymmetry** | Low | `call_session.py:821` | `recordingEnabled` only set to `False` when disabled. When enabled, relies on VAPI dashboard default. |
+| **FeedScreen dead buttons** | Medium | `FeedScreen.js` | Cancel Call and End Call buttons have no `onPress` handlers. |
+| **OutboundLiveScreen End Call** | Medium | `OutboundLiveScreen.js:114` | Navigates back without waiting for API response or confirming call actually ended. |
+| **BizDetail link buttons** | Low | `BizDetail.js` | Chat, Compare, Map buttons have no `onPress` handlers. |
+| **JSON storage O(N) scan** | Low | `json_storage.py:239` | `get_user_profile_by_phone()` does full-file scan — no indexed lookup like Firestore.
 
 ---
 
@@ -1423,6 +2033,6 @@ async def generate_business_prompt(knowledge_base_text):
 
 3. **WebSocket + FCM dual channel**: WebSocket for high-frequency transcript (needs ordering). FCM for state changes (call started, ended). Different channels for different data patterns.
 
-4. **5-layer ANI resolution**: Real-world SIP headers are messy. Different carriers provide different headers. The 5-layer approach handles edge cases: Diversion header, SIP From/To, phone map cache, DB by business phone, DB by owner phone.
+4. **3-layer ANI resolution**: Real-world SIP headers are messy. Different carriers provide different headers. The 3-layer approach handles edge cases: Diversion header → other SIP headers → direct DB lookup. The Firestore phone lookup internally has 5 matching attempts (exact → +91 prefix → without prefix → raw 10-digit → full scan), but the routing itself is 3 layers.
 
 5. **Multi-tenant via nested business object**: Business config lives inside user_profiles. No separate businesses collection. Denormalized for fast reads — one document fetch gets everything needed for call handling.

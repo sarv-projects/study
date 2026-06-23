@@ -69,7 +69,7 @@ flowchart TB
 | Embeddings | Gemini gemini-embedding-001 | 3072-dim. API-based, no GPU needed |
 | Search | SQLite FTS5 + numpy | BM25 + vector. No external vector DB needed |
 | Observability | Langfuse v4 | LLM call tracing, user feedback |
-| Deployment | Docker → Cloud Run | Single container, auto-scaling to 0 |
+| Deployment | Docker → DigitalOcean App Platform | Full stack hosting (backend + frontend). $0 via GitHub Education $200 credit. Auto-deploy from GitHub branch. |
 
 ---
 
@@ -77,74 +77,106 @@ flowchart TB
 
 ```
 roast/
+├── ROAST_LLM_ROUTING.md       # 260-line LLM routing architecture doc
 ├── backend/
-│   ├── main.py              # FastAPI entry, routers, startup/shutdown
-│   ├── config.py            # Env vars: API keys, rate limits, thresholds
-│   ├── market_data.py       # 982 lines. SQLite config DB CRUD + seed data
-│   ├── pdf_reader.py        # Resume PDF → text + link extraction
-│   ├── agents/              # 6 AI agents
-│   │   ├── resume_extractor.py    # Pre-pipeline: structured resume facts
-│   │   ├── market_context_agent.py # Agent 1 (runs first): weight calibration
-│   │   ├── red_flag_agent.py      # Agent 2: 11 red flag categories
-│   │   ├── six_second_agent.py    # Agent 3: recruiter scan + trajectory
-│   │   ├── competitive_agent.py   # Agent 4: percentile + CTC estimation
-│   │   ├── technical_depth_agent.py # Agent 5: project eval with web search
-│   │   ├── review_agent.py        # Agent 6 (runs last): full review synthesis
-│   │   ├── followup_agent.py      # Post-review: follow-up Q&A
-│   │   └── prompts/               # System prompts per agent
-│   ├── llm/                 # Provider clients + routing
-│   │   ├── router.py              # Routes to providers with fallback chains
-│   │   ├── groq_client.py         # Distributed key rotation via Redis
-│   │   ├── gemini_client.py       # Gemini fallback
-│   │   ├── openrouter_client.py   # Emergency fallback
-│   │   ├── nvidia_nim_client.py   # NVIDIA NIM fallback
-│   │   ├── cerebras_client.py     # Cerebras fallback
-│   │   ├── langfuse_client.py     # Observability wrapper
-│   │   └── circuit_breaker.py     # 3-state per-provider breaker
+│   ├── main.py                # FastAPI entry, routers, startup/shutdown
+│   ├── config.py              # Env vars: API keys, rate limits, thresholds
+│   ├── market_data.py         # 982 lines. SQLite config DB CRUD + seed data
+│   ├── pdf_reader.py          # Resume PDF → text + link extraction
+│   ├── agents/                # 6 AI agents + support files
+│   │   ├── resume_extractor.py
+│   │   ├── market_context_agent.py
+│   │   ├── red_flag_agent.py
+│   │   ├── six_second_agent.py
+│   │   ├── competitive_agent.py
+│   │   ├── technical_depth_agent.py
+│   │   ├── review_agent.py
+│   │   ├── followup_agent.py
+│   │   ├── tech_search.py     # 91 lines. DuckDuckGo lookup with 30-day Redis cache
+│   │   ├── json_utils.py      # 51 lines. 4-layer JSON extraction
+│   │   ├── schemas.py         # 168 lines. Pydantic models for all agents
+│   │   └── prompts/           # 7 prompt files:
+│   │       ├── template.py              # Base prompt builder
+│   │       ├── review_prompt.py         # 356-line market+company-aware review
+│   │       ├── red_flag_prompt.py       # 188-line 11-category hunting
+│   │       ├── six_second_prompt.py     # Company-type-aware scan
+│   │       ├── competitive_prompt.py    # Percentile + salary calibration
+│   │       ├── market_context_prompt.py # Weight map synthesis
+│   │       └── follow_up_prompt.py      # 100-200 word rule
+│   ├── llm/                   # Provider clients + routing
+│   │   ├── router.py          # Routes to providers with fallback chains
+│   │   ├── groq_client.py     # Distributed key rotation via Redis
+│   │   ├── gemini_client.py   # Gemini with asyncio lock key rotation
+│   │   ├── openrouter_client.py
+│   │   ├── nvidia_nim_client.py
+│   │   ├── cerebras_client.py
+│   │   ├── langfuse_client.py
+│   │   └── circuit_breaker.py # 3-state per-provider breaker
 │   ├── pipeline/
-│   │   └── orchestrator.py  # 480 lines. Coordinates ALL agents
+│   │   └── orchestrator.py    # 480 lines. Coordinates ALL agents
 │   ├── retrieval/
-│   │   └── dive.py          # 645 lines. 5-stage retrieval pipeline
+│   │   └── dive.py            # 645 lines. 5-stage retrieval pipeline
 │   ├── routes/
-│   │   ├── analyse.py       # POST /api/analyse
-│   │   ├── session.py       # POST /api/session-init
-│   │   ├── websocket.py     # WS /api/ws/{session_id}
-│   │   ├── followup.py      # POST /api/followup
-│   │   ├── cron.py          # POST /refresh-market-intel
-│   │   └── token_feedback.py # POST /api/token, /api/feedback
+│   │   ├── analyse.py         # POST /api/analyse
+│   │   ├── session.py         # POST /api/session-init
+│   │   ├── websocket.py       # WS /api/ws/{session_id}
+│   │   ├── followup.py        # POST /api/followup
+│   │   ├── cron.py            # POST /refresh-market-intel
+│   │   ├── token_feedback.py  # POST /api/token, /api/feedback
+│   │   └── ws_manager.py      # 80 lines. WebSocket connection manager
 │   ├── storage/
-│   │   ├── session_store.py # Redis session CRUD
-│   │   ├── rate_limit.py    # IP-based, IST midnight reset
-│   │   └── redis_client.py  # Upstash Redis singleton
-│   └── corpus/              # Anonymized signal DB for calibration
-├── frontend/                # React SPA
+│   │   ├── session_store.py   # Redis session CRUD
+│   │   ├── rate_limit.py      # IP-based, IST midnight reset
+│   │   └── redis_client.py    # Upstash Redis singleton
+│   └── corpus/                # Anonymized signal DB for calibration
+│       ├── corpus_store.py
+│       └── bullet_curator.py
+├── ingestion/
+│   ├── pipeline.py            # Orchestrator. 10 queries/combo
+│   ├── extractor.py           # LLM signal classification
+│   ├── search.py              # 133 lines. BM25 (FTS5) search
+│   ├── embeddings.py          # 166 lines. Gemini embedding + vector search
+│   ├── database.py            # 100 lines. SQLite schema + FTS5 virtual tables
+│   ├── levels_scraper.py      # 100 lines. Levels.fyi direct httpx scrape
+│   ├── tavily_client.py       # Budget-tracked Tavily search
+│   ├── breaking_signal.py     # 24h breaking news layer
+│   └── market_intel.db        # Pre-populated 30MB SQLite (committed in git)
+├── frontend/                  # React SPA
+│   ├── vite.config.js         # Vite config: React + Tailwind + proxy to :8000
 │   └── src/
-│       ├── App.jsx          # View routing: landing vs analysis
-│       ├── lib/api.js       # 8 API functions + WebSocket creator
+│       ├── App.jsx
+│       ├── lib/api.js
 │       ├── hooks/
-│       │   ├── useWebSocket.js    # WS with polling fallback + heartbeat
-│       │   └── useInferenceToggle.js # localStorage toggle
+│       │   ├── useWebSocket.js
+│       │   └── useInferenceToggle.js
 │       └── components/
-│           ├── LandingPage.jsx    # Upload form (440 lines)
-│           ├── AnalysisProgress.jsx # 8-step progress (201 lines)
-│           ├── ResultsPage.jsx    # Results orchestrator (229 lines)
-│           ├── TLDRBlock.jsx      # Shortlist chance + fixes
-│           ├── MarketPulse.jsx    # Salary, sentiment, signals
-│           ├── ReviewDocument.jsx # 6-section accordion (266 lines)
-│           ├── Feedback.jsx       # Thumbs + token unlock
+│           ├── LandingPage.jsx
+│           ├── AnalysisProgress.jsx
+│           ├── ResultsPage.jsx
+│           ├── TLDRBlock.jsx
+│           ├── MarketPulse.jsx
+│           ├── ReviewDocument.jsx
+│           ├── Feedback.jsx
+│           ├── ErrorBoundary.jsx  # 29 lines. Catches agent/WS failures
 │           └── SkeletonLoader.jsx
-├── ingestion/               # Monthly market intel builder
-│   ├── pipeline.py          # Orchestrator. 10 queries/combo
-│   ├── extractor.py         # LLM signal classification
-│   ├── search.py            # SQLite FTS5 CRUD
-│   ├── embeddings.py        # Gemini embedding + vector search
-│   ├── tavily_client.py     # Budget-tracked Tavily search
-│   └── breaking_signal.py   # 24h breaking news layer
-├── tests/                   # 7 test files
+├── pyproject.toml             # Python >=3.12, dependencies
+├── uv.lock                    # 473KB lock file
+├── tests/
+│   ├── test_config.py
+│   ├── test_levels_scraper.py
+│   ├── test_pdf_reader.py
+│   ├── test_phase1.py
+│   ├── test_rate_limit.py
+│   ├── test_session_store.py
+│   ├── test_tavily_client.py
+│   └── sample.pdf             # Test fixture
 └── scripts/
-    ├── prepopulate.py       # Ingestion for all 70 combos
-    └── reembed.py           # Regenerate missing embeddings
+    ├── prepopulate.py          # Ingestion for all 70 combos
+    ├── reembed.py              # Regenerate missing embeddings
+    └── perf_audit.py           # 129 lines. Performance audit tool
 ```
+
+> **Note on committed DB files**: `backend/market_config.db` (90KB) and `ingestion/market_intel.db` (30MB) are intentionally tracked in git. The `.gitignore` explicitly allows them with a comment: *"Database — intentionally tracked, contains pre-populated market signals (no secrets)"*. This means the app works out-of-the-box without running the 1-hour ingestion script. The DB files contain only public market data (salary surveys, hiring signals) — no secrets or PII.
 
 ---
 
@@ -1154,4 +1186,8 @@ flowchart LR
 
 4. **WebSocket + polling dual-mode**: WebSocket for real-time streaming during normal operation. HTTP polling fallback for reconnection. Heartbeat monitor detects silent disconnects.
 
-5. **$0 infrastructure**: All services on free tiers (Groq, Gemini, Upstash, Tavily, Resend, Cloud Run free quota). This constrains architecture (rate limits, budget tracking) but keeps operating cost at zero.
+5. **$0 infrastructure**: All services on free tiers (Groq, Gemini, Upstash, Tavily, Resend). Hosted on DigitalOcean App Platform via GitHub Education $200 credit — NOT Cloud Run.
+
+6. **Committed SQLite DBs**: `market_config.db` (90KB) and `market_intel.db` (30MB) are intentionally tracked in git. The `.gitignore` explicitly permits this with documentation. This means the app works out-of-the-box on clone without running the 1-hour ingestion pipeline. Tradeoff: binary artifacts in git history (accepted for a portfolio project).
+
+7. **Orphaned ROAST_LLM_ROUTING.md**: There's a standalone 260-line LLM routing architecture doc in the repo root covering provider fallback chains, circuit breaker patterns, and model selection reasoning — not linked from the README. Consider referencing it alongside this deep dive for the full routing picture.
