@@ -5,6 +5,192 @@
 
 ---
 
+## Interview Quick-Reference: AI/ML Basics That Get Asked
+
+These are the ML fundamentals (covered in detail in `01_AI_ML_Basics.md`) that interviewers tie into LLM/RAG/Agentic questions. Below are full detailed answers — not bullet points.
+
+---
+
+### How Overfitting Connects to LLM Hallucination
+
+**If they ask about overfitting, connect it to why LLMs hallucinate**:
+
+The same way a small model overfits to training data by memorizing noise rather than learning patterns, LLMs "overfit" to their training distribution. When you ask an LLM about something rare (a niche topic, a recent event, a specific internal document), the model doesn't have enough training examples to generate a correct response. Instead, it falls back to the nearest pattern it knows — which is often wrong. This is hallucination.
+
+```python
+# Overfitting intuition in LLMs
+# Training data: 1M examples about "Python programming"
+# Training data: 10 examples about "Zig programming"
+
+query = "What are Zig's compile-time features?"
+# LLM trained on 1M Python examples, 10 Zig examples
+# The model "overfits" to Python patterns
+# → Hallucinates: "Zig has decorators and list comprehensions" (WRONG — that's Python)
+
+# Solution: RAG (like giving the model a cheat sheet)
+# Instead of relying on memory, give it the Zig documentation:
+prompt = f"Here is the Zig docs: {retrieved_docs}\n\nAnswer: {query}"
+# Now it doesn't need to remember — it reads the facts
+```
+
+RAG solves this by grounding the LLM in retrieved facts — it's like switching from closed-book exam (where you might guess) to open-book exam (where you look up the answer). The LLM's "memory overfitting" stops mattering because it has the source material in front of it.
+
+---
+
+### How Bias-Variance Tradeoff Maps to Temperature
+
+**If they ask about bias-variance, connect it to why temperature matters**:
+
+Temperature controls the variance of the LLM's output distribution. This is a direct application of the bias-variance tradeoff from classical ML.
+
+```python
+# Temperature controls the tradeoff
+def softmax_with_temperature(scores, temperature=1.0):
+    scores = scores / temperature
+    exp_scores = np.exp(scores)
+    return exp_scores / exp_scores.sum()
+
+# Low temperature (0.1): Low variance, high bias
+# The model always picks the most likely word
+# Output: deterministic, safe, boring
+# Analogy: Always ordering your usual dish at a restaurant
+
+# High temperature (1.5): High variance, low bias  
+# The model explores less likely words
+# Output: creative, surprising, sometimes wrong
+# Analogy: Trying random dishes — sometimes amazing, sometimes terrible
+```
+
+**When to use each**:
+- Code generation: temperature 0.1-0.2 (low variance — you want the same correct code every time)
+- Creative writing: temperature 0.7-0.9 (some variance — you want interesting prose)
+- Customer service: temperature 0.3-0.5 (balanced — consistent but not robotic)
+
+**SoundHound connection**: "Amelia's Agentic+ uses low temperature for deterministic BPN workflows (you don't want the AI improvising on a refund policy) and higher temperature for generative conversations where variety improves the customer experience."
+
+---
+
+### How Gradient Descent Trains LLMs
+
+**If they ask about gradient descent, connect it to how LLMs are trained**:
+
+LLM training is gradient descent applied to the next-token prediction task at an enormous scale. The mechanism is the same as training any neural network — just with more data, more parameters, and more compute.
+
+```python
+# LLM Training = Gradient Descent on Next-Token Prediction
+
+# Step 1: Forward pass
+input_tokens = ["The", "capital", "of", "France", "is"]
+# Model predicts next token probability distribution:
+predicted = model(input_tokens)  # → {Paris: 0.85, London: 0.05, Berlin: 0.03, ...}
+
+# Step 2: Calculate loss (cross-entropy)
+actual_next_token = "Paris"  # The correct answer from training data
+loss = cross_entropy(predicted, actual_next_token)
+# If model was confident and correct: loss ≈ 0.16
+# If model predicted "London": loss ≈ 3.0
+
+# Step 3: Backpropagation
+# Compute gradient of loss with respect to EVERY parameter
+# GPT-3 has 175 billion parameters — that's 175B gradients to compute
+
+# Step 4: Gradient descent step
+for param in model.parameters():
+    param -= learning_rate * param.grad  # Standard SGD
+    # With 175B params, this is ~700GB of gradient values
+```
+
+**Why it costs $10M+ to train GPT-4**:
+- Forward pass: compute predictions for 1 trillion tokens
+- Backward pass: compute gradients through 96 transformer layers
+- Each layer does: attention (QKV projections) → FFN (2 linear layers) → layer norm
+- Requires 10,000+ GPUs running for weeks
+- Memory: activations for all layers must be stored (hundreds of GB per GPU)
+
+**SoundHound connection**: "Amelia's intent models are fine-tuned using the same gradient descent process, just at a smaller scale. Pre-trained transformer encoders are adapted to client-specific intents by continuing gradient descent on labeled utterances — this is called fine-tuning, and it takes hours not weeks."
+
+---
+
+### How Cross-Entropy Loss Optimizes LLMs
+
+**If they ask about loss functions, connect it to what LLMs optimize**:
+
+LLMs are trained to minimize cross-entropy loss on the next-token prediction task. Every parameter in the model exists to make the probability distribution over the vocabulary closer to the actual next token.
+
+```python
+# Cross-entropy for a single token position:
+# Vocabulary size: 50,000 tokens
+# Model output: probability distribution over 50K tokens
+predicted = [p1, p2, p3, ..., p50000]  # Sums to 1.0
+# Actual (one-hot): [0, 0, 1, 0, ..., 0]  # Token #3 is correct
+
+# Cross-entropy loss:
+loss = -log(predicted[3])  # Only the correct token's probability matters
+# If predicted[3] = 0.85 → loss = 0.16  (confident and correct)
+# If predicted[3] = 0.01 → loss = 4.6   (model was wrong)
+
+# Over the entire sequence (say 4096 tokens):
+total_loss = sum(cross_entropy(predicted[t], actual[t]) for t in range(4096))
+average_loss = total_loss / 4096  # Perplexity = exp(average_loss)
+```
+
+**Why cross-entropy and not MSE?** Cross-entropy heavily penalizes confident wrong predictions. If the model predicts 99% probability for the wrong token and 1% for the correct one, the loss is -log(0.01) = 4.6. If it predicted 50% for the correct token, loss is -log(0.5) = 0.69. This forces the model to be confident about correct predictions.
+
+**Perplexity** = exp(average cross-entropy). It's the standard LLM quality metric. GPT-4 has a perplexity around 10-15 on held-out data — meaning the model is as "surprised" as if it had to choose between 10-15 equally likely tokens.
+
+---
+
+### How Self-Supervised Learning Enables GPT
+
+**If they ask about supervised vs self-supervised, connect it to why LLMs scale**:
+
+GPT pre-training is **self-supervised** — the labels come from the data itself, not from human annotation. For next-token prediction, the next token in the sequence IS the label. This is why LLMs can train on trillions of tokens of unlabeled internet text.
+
+```python
+# Self-supervised learning in GPT
+
+# Raw text from the internet (no human labels needed):
+text = "The capital of France is Paris. It is known for the Eiffel Tower."
+
+# The model creates its own training pairs:
+# Input: "The capital of France is" → Label: "Paris"
+# Input: "The capital of France is Paris" → Label: "It"
+# Input: "The capital of France is Paris. It" → Label: "is"
+# ... and so on for every position
+
+# This is why GPT can scale: no humans needed to label 1 trillion tokens
+# Contrast with supervised learning where every example needs a label:
+supervised_examples = [
+    ("Is this email spam?", "spam"),    # Human had to label this
+    ("Book a flight to Mumbai", "booking_intent"),  # Human labeled this
+    # ... expensive to scale
+]
+```
+
+RLHF (Reinforcement Learning from Human Feedback) adds a supervised step AFTER pre-training — humans rank model outputs, and a reward model learns those preferences. But the foundation is self-supervised.
+
+**SoundHound connection**: "Amelia's intent training uses supervised learning (humans label example utterances). But the underlying Speech-to-Meaning model is self-supervised — it learns to map audio to meaning directly from unlabeled speech data, which is why SoundHound's system has been improving for 20 years without requiring constant manual annotation."
+
+---
+
+### Lower Confidence Connections (Know Briefly)
+
+**Underfitting and Model Scale**: "GPT-2 with 1.5B parameters underfits many reasoning tasks. GPT-4 with an estimated 1.8T parameters handles them easily. This suggests that many AI capabilities emerge at sufficient scale — the model was simply too small to learn the pattern."
+
+**Train/Val/Test in LLMs**: "LLMs use held-out benchmarks like MMLU (undergrad knowledge), GSM8K (math reasoning), and HumanEval (code generation) as test sets. These benchmarks are never used during training — they're the final exam. The validation set is a random subset of the training data used to decide when to stop training."
+
+**Neural Networks**: "A transformer is a neural network — it has weights, biases, activation functions, and loss functions. The difference is the architecture: instead of dense layers, transformers use attention layers that can directly connect any two positions in the sequence. This is what enables long-range understanding."
+
+---
+
+### What NOT to Mention (Unless They Ask)
+
+- Don't derive backpropagation formulas — it wastes interview time and they're testing concept understanding, not calculus
+- Don't explain Q-Learning — it's unrelated to the LLM/RAG/Agentic work the CIE role does
+- Don't recite vocabulary sizes or model parameter counts without context — connect every number to a design decision
+
+---
+
 # PART 0: THE BIG PICTURE (Read This First)
 
 ## 0.1 What is RAG? (30-Second Answer)
@@ -34,7 +220,44 @@ This is the SINGLE most common production pattern. ROAST, SYNAPSE, SuperOwl — 
 
 ## 0.2 What is Agentic AI? (30-Second Answer)
 
-An AI Agent is an LLM that can **use tools** and **make decisions** in a loop.
+An AI Agent is a system where an LLM acts as the **reasoning engine**, deciding which **tools** to call and in what sequence based on observations. The agent includes the LLM (brain), tools (hands), memory (history), guardrails (rules), and the orchestration loop that connects them.
+
+```python
+# What "LLM + tools + loop" actually looks like:
+class Agent:
+    def __init__(self):
+        self.llm = LLM()              # The reasoning engine (brain)
+        self.tools = ToolRegistry()    # Functions it can call (hands)
+        self.memory = []               # Conversation history (memory)
+        self.guardrails = Guardrails() # Safety constraints (rules)
+    
+    def run(self, user_input):
+        self.memory.append(user_input)
+        
+        while not task_done:
+            # REASON: LLM decides next step
+            decision = self.llm.think(self.memory, self.tools.list())
+            
+            if decision.type == "respond":
+                return decision.response
+            elif decision.type == "call_tool":
+                # ACT: Execute the tool
+                result = self.tools.execute(decision.tool, decision.params)
+                # OBSERVE: Feed result back
+                self.memory.append(result)
+```
+
+Components of an agent:
+
+| Component | Role | Example |
+|-----------|------|---------|
+| **LLM** | Reasoning engine — decides what to do | GPT-4, Claude, Llama |
+| **Tools** | Functions the LLM can invoke | `search_flights()`, `check_calendar()`, `book_flight()` |
+| **Memory** | Conversation history + state | Chat history, user preferences, session data |
+| **Guardrails** | What the agent CANNOT do | "Never delete data", "Never exceed $1000" |
+| **Orchestration Loop** | perceive → reason → act → observe → repeat | The while loop above |
+
+The LLM is the brain. The agent is the whole body.
 
 ```
 User: "Book me a flight to Mumbai next Friday"
@@ -54,6 +277,8 @@ User: "Book me a flight to Mumbai next Friday"
 ```
 
 The agent doesn't follow a script. It **thinks, acts, observes, adapts** — just like a human would.
+
+Also note: AI agents existed **long before LLMs** — vacuum cleaning robots (Roomba), game AIs (AlphaGo), autopilots. Those don't use LLMs at all. An LLM-powered agent is a specific type of agent where the reasoning engine is a large language model.
 
 ## 0.3 How They Fit Together
 

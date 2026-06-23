@@ -17,35 +17,52 @@ A multi-tenant voice AI platform where businesses automate customer phone calls.
 
 ```mermaid
 flowchart TB
-    Phone["📞 Customer calls business number"] --> VAPI
+    Phone["📞 Customer dials the<br/>business owner's phone number"] --> FORWARD
     
-    VAPI["☁️ VAPI — Answers call, sends webhooks"] --> ENTRY
+    FORWARD["📲 Owner has call forwarding<br/>enabled on their SIM (dual-SIM)<br/>Call gets forwarded to VAPI number"] --> VAPI
     
-    ENTRY["1. Entry: main.py<br/>Routes requests to the right handler"] --> CALLS
+    VAPI["☁️ VAPI — Answers the forwarded call<br/>Sends webhooks to our backend"] --> ENTRY
     
-    CALLS["2. Call Handling<br/>call_session.py: Who is this call for?<br/>call_events.py: Handle transcript + end-of-call<br/>call_orchestrator.py: Make outbound calls"] --> AI
+    ENTRY["1. Entry: main.py<br/>Routes requests to the right handler"] --> WEBHOOK
     
-    AI["3. AI & Prompts<br/>prompt_builder.py: Build AI personality<br/>groq_service.py: Summarize calls<br/>gemini_service.py: KB→prompt"] --> INT
+    WEBHOOK["vapi_webhook.py<br/>Dispatches by event type"] --> INBOUND
+    WEBHOOK --> TRANSCRIPT
+    WEBHOOK --> ENDCALL
     
-    INT["4. Integrations<br/>slack_service.py: Send to Slack<br/>fcm_service.py: Push notifications<br/>owner_flow.py: Escalate to human"] --> STORE
+    INBOUND["assistant-request event:<br/>call_session.py handles ANI + config"] --> AI
     
-    STORE["5. Storage<br/>storage.py → Firestore (prod) or JSON files (dev)"]
+    AI["2. AI & Prompts<br/>prompt_builder.py: Build AI personality<br/>(called FIRST, before storage)"] --> STORE
+    
+    STORE["3. Storage<br/>storage.create_call_log() + set_session()"] --> INT
+    
+    INT["4. Integrations (fire-and-forget)<br/>slack_service.py: Send to Slack<br/>fcm_service.py: Push notifications<br/>(run as async background tasks)"] 
+    
+    TRANSCRIPT["transcript event:<br/>call_events.py → handle_transcript()"] --> T_AI
+    T_AI["Groq summarization +<br/>WebSocket broadcast +<br/>Slack + FCM (throttled)"]
+    
+    ENDCALL["end-of-call-report event:<br/>call_events.py → handle_end_of_call()"] --> E_AI
+    E_AI["Groq summarization +<br/>outcome detection +<br/>FCM + Slack cleanup"]
     
     INT -->|"Push"| FCM["☁️ Firebase Cloud Messaging"]
     FCM --> APP["📱 Mobile App"]
     INT -->|"Update"| SLACK["👤 Owner's Slack"]
     
-    APP -->|"REST + WebSocket"| CALLS
+    APP -->|"REST + WebSocket"| WEBHOOK
+    
+    %% Outbound - separate flow
+    OUT["📱 Outbound Call (separate flow)<br/>trigger.py → call_orchestrator.py<br/>(not in inbound path)"]
 ```
 
-**In plain English:**
-1. Customer calls business number → VAPI answers and sends us a webhook
-2. `main.py` receives it → routes to `call_session.py`
-3. `call_session.py` figures out which business this is for, loads their config
-4. `prompt_builder.py` creates the AI's personality for this specific call
-5. AI talks to customer; transcripts flow to mobile, Slack, and push notifications
-6. After call: `groq_service.py` summarizes what happened
-7. If AI needs help: `owner_flow.py` escalates to the business owner
+**In plain English (inbound call flow):**
+1. Customer calls business number → VAPI answers and sends an "assistant-request" webhook
+2. `main.py` receives it → `vapi_webhook.py` routes to `call_session.py`
+3. `call_session.py` first calls `prompt_builder.py` to build the AI personality
+4. THEN saves call data to storage (create_call_log + session)
+5. THEN fires Slack + FCM as fire-and-forget background tasks
+6. During the call: transcript events go to `call_events.py` → Groq summarization + WebSocket + Slack + FCM
+7. After call: end-of-call-report → outcome detection + Groq summary + notifications cleanup
+
+**Note**: `call_orchestrator.py` is OUTBOUND-only (triggered from the mobile app). `gemini_service.py` is only used in the prompt generation endpoint (`/businesses/{uuid}/generate-prompt`), NOT during live calls. The live call flow uses only `groq_service.py` for AI processing.
 
 ---
 
@@ -228,7 +245,9 @@ across restarts — so file-based SQLite won't work. Firestore fits the
 serverless-internship infra constraint.
 
 **Why 7.5s timeout specifically?**
-VAPI's fixed webhook timeout is 7.5s. This dictated the entire architecture:
+VAPI's fixed webhook timeout is 7.5s — this is enforced **server-side by VAPI**, not by the backend. If the backend takes >7.5s, VAPI retries or fails the call. The code handles this by deferring Slack/FCM notifications to `asyncio.create_task` background tasks after sending the critical response.
+
+This dictated the entire architecture:
 - Critical path: ANI → config → response MUST fit in 7.5s
 - Non-critical: Slack notification, FCM push → fire-and-forget AFTER response
 - If 7.5s had been 3s: needed local SQLite cache + pre-warmed configs
@@ -2021,7 +2040,9 @@ These are bugs found by cross-referencing the study guide against actual source 
 | **FeedScreen dead buttons** | Medium | `FeedScreen.js` | Cancel Call and End Call buttons have no `onPress` handlers. |
 | **OutboundLiveScreen End Call** | Medium | `OutboundLiveScreen.js:114` | Navigates back without waiting for API response or confirming call actually ended. |
 | **BizDetail link buttons** | Low | `BizDetail.js` | Chat, Compare, Map buttons have no `onPress` handlers. |
-| **JSON storage O(N) scan** | Low | `json_storage.py:239` | `get_user_profile_by_phone()` does full-file scan — no indexed lookup like Firestore.
+| **JSON storage O(N) scan** | Low | `json_storage.py:239` | `get_user_profile_by_phone()` does full-file scan — no indexed lookup like Firestore. |
+| **trigger.py chat_summary bug** | Medium | `trigger.py:34` | `OutboundCallbackRequest` schema no longer has `chat_summary` field, but `trigger.py:34` still accesses `request.chat_summary`. Will raise AttributeError at runtime. |
+| **Architecture note: gemini_service NOT in call flow** | Info | `call_session.py`, `call_events.py` | `gemini_service.py` is used only in the `/businesses/{uuid}/generate-prompt` endpoint (prompts.py), NOT during live calls. The live call flow uses only `groq_service.py` for AI. |
 
 ---
 
