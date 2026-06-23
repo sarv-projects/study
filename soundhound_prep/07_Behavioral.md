@@ -282,21 +282,19 @@ def has_unique(s):
 
 ## 5. Weaknesses (Honest, Grounded)
 
-### Weakness 1: Solo on Most Projects
-
-> "I've been mostly solo. ROAST, SYNAPSE, SuperOwl — I built them alone. ACARE was the only team project. I want to learn how to work in cross-functional agile teams — that's actually one reason I'm interested in this role. The CIE role involves working with Technical Architects, Cognitive Project Leads, and integration experts. I want to build that muscle."
-
-**Why this works**: It's honest, it's self-aware, and it connects to why you want THIS role.
-
-### Weakness 2: No Java/Groovy Experience
-
-> "My primary languages are Python and JavaScript. The role requires Java or Groovy. I'm confident I can pick up Groovy quickly — the patterns transfer from Python. I've learned new frameworks fast before: I picked up LangGraph from zero to a working 8-node pipeline in a week."
-
-**Why this works**: Acknowledges the gap. Shows you've learned fast before with a concrete example.
-
-### Weakness 3: Over-Engineer Early
+### Weakness 1: Over-Engineer Early
 
 > "I tend to add complexity before I need it. In ROAST, I built the ingestion pipeline synchronously — it took 10 hours for 70 combinations. I could've started with async concurrency from day one, but I was over-thinking rate limits. A simple semaphore fixed it — under an hour. I've learned to start simple and add complexity when the data shows I need it."
+
+**Why this works**: It's a real technical weakness with a concrete example and a lesson learned.
+
+### Weakness 2: Limited Social Media Presence
+
+> "I don't have much of a social media presence. I'm on LinkedIn and WhatsApp, but I don't use Instagram, Twitter, or other platforms. I've been heads-down building projects for the past two years — that's where my time went.
+>
+> The upside: I'm deeply focused. The downside: I'm not naturally networked. I'm working on it — I've started sharing my projects on LinkedIn and engaging with the AI community there. But it's a muscle I need to build."
+
+**Why this works**: It's honest, it explains WHY (time went to building), and it shows self-awareness about the gap. For a CIE role that involves client interaction, this is a real area for growth.
 
 ---
 
@@ -465,6 +463,55 @@ R — Result (measurable outcome + what you learned)
 >
 > And **OASYS** is new — being model-agnostic means enterprises aren't locked into one LLM. Competitors typically force you into their ecosystem."
 
+### "How would you handle a client who wants a feature Amelia doesn't support?"
+
+> "In my SuperOwl internship, the founder wanted a feature that would have required changes to VAPI's platform — something outside our control. Instead of saying 'we can't,' I explained the constraint and offered an alternative: we could handle the logic on our end via webhooks, even if we couldn't change VAPI's behavior. They accepted.
+>
+> The same approach applies to Amelia: if a client wants something the platform doesn't natively support, I'd first check if a Cognitive Function or integration can approximate it. If not, I'd be honest about the limitation and propose workarounds — maybe a custom integration via MCP, or a BPN that handles the edge case. Clients appreciate honesty with options more than false promises."
+
+### "How do you test a conversational AI system?"
+
+> "For SuperOwl, I built a test suite with three layers:
+>
+> 1. **Unit tests** for the storage layer — verifying that call logs, sessions, and business profiles are created/read/updated correctly.
+> 2. **Integration tests** for the VAPI webhook flow — simulating webhook payloads and verifying the response format, ANI resolution, and prompt building.
+> 3. **End-to-end tests** using a local Firestore emulator — verifying the full flow from webhook to Slack notification.
+>
+> For conversational AI specifically, I'd also test:
+> - **Intent accuracy**: Does 'book a flight' correctly trigger the booking intent?
+> - **Entity extraction**: Does 'fly to Mumbai on Friday' correctly extract destination and date?
+> - **Edge cases**: What happens when the user says something ambiguous? What about out-of-scope queries?
+> - **Fallback behavior**: Does the system gracefully handle when it doesn't understand?"
+
+### "How do you manage multiple projects or priorities?"
+
+> "During my SuperOwl internship, I was simultaneously building the voice AI platform, setting up the test suite, and responding to founder feature requests. I used a simple prioritization framework:
+>
+> 1. **Must-have for launch** — core functionality that blocks the product. I'd do these first.
+> 2. **Nice-to-have for launch** — features that improve UX but aren't blockers. I'd do these if time permits.
+> 3. **Post-launch** — features that can wait for v2. I'd document them and defer.
+>
+> The key habit: when requirements pile up, I write them down first, estimate effort, then negotiate scope with the stakeholder. This prevents scope creep and keeps the team aligned on what's actually being delivered."
+
+### "How do you explain technical limitations to non-technical stakeholders?"
+
+> "In my SuperOwl internship, the business founder didn't understand why some calls had a delay before the AI assistant responded. Instead of talking about VAPI webhooks, ANI resolution, or 7.5-second timeouts, I used an analogy: 'Imagine you're calling a business. The receptionist needs to check a binder to find who handles your type of request, then read a script before answering. That lookup takes time. Our system does the same thing — it needs to figure out who you're calling, pull up their settings, and build the right script. The delay is the lookup time.'
+>
+> The founder immediately understood. The latency wasn't a bug; it was research time. I find that analogies work better than technical explanations — they map unfamiliar concepts to familiar experiences."
+
+### "What does a Cognitive Implementation Engineer do day-to-day?"
+
+> "Based on my understanding of the role and Amelia's documentation:
+>
+> 1. **Transversal Analysis** — Understanding the client's business domain, existing systems, and integration points. This is the discovery phase.
+> 2. **Architecture Blueprint** — Designing the solution: which Entities to define, which Cognitive Functions to build, which integrations to configure.
+> 3. **Configuration** — Building the actual Amelia deployment: ontologies, BPNs, automatas, prompt templates.
+> 4. **Integration Development** — Connecting Amelia to the client's CRM, ERP, or other backend systems via REST APIs or MCP.
+> 5. **Testing and Iteration** — Verifying the deployment works in the client's environment, iterating based on feedback.
+> 6. **Reusability** — Building components that can be reused across future client deployments.
+>
+> It's the intersection of conversational AI, client-facing problem solving, and system integration — which is exactly what I've been doing in my projects."
+
 ---
 
 ## 12. Your 3 Questions to Ask
@@ -494,7 +541,7 @@ THIS ROLE → Configure Amelia for enterprises. BPNs, ontologies, automatas, int
 YOUR FIT → SuperOwl = same pattern. Voice AI + multi-agent + integrations.
 
 STRENGTHS → Ship alone, build for failure, voice AI end-to-end
-WEAKNESSES → Solo (need team experience), no Java/Groovy (learn fast), over-engineer early
+WEAKNESSES → Over-engineer early, limited social media presence
 
 YOUR PROJECTS:
   SuperOwl (solo) — Multi-tenant voice AI platform, VAPI integration, HITL
