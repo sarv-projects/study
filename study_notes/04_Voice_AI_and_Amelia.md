@@ -1,7 +1,7 @@
 # Voice AI — Full Pipeline from Mic to Speaker
 
 > **Target**: Complete beginner in voice AI.
-> **Goal**: Understand every component of the voice AI pipeline, the metrics that matter, SoundHound's innovations, and the Amelia platform.
+> **Goal**: Understand every component of the voice AI pipeline, the metrics that matter, the platform innovations, and the the platform platform.
 
 ---
 
@@ -36,7 +36,7 @@ User hears → SPEAKER
 5. **TTS**: Converts the response text back to natural-sounding speech
 
 ### Why This Matters
-This pipeline is what SoundHound builds. Every role at SoundHound involves some part of this pipeline. Even backend engineers need to understand how their APIs fit into this flow.
+This pipeline is what the platform builds. Every role at the platform involves some part of this pipeline. Even backend engineers need to understand how their APIs fit into this flow.
 
 ---
 
@@ -62,7 +62,7 @@ Audio waveform
 ```
 
 ### Why This Matters
-Deepgram Nova-2 (used in ACARE) achieves WER ~5.5%. SoundHound's Speech-to-Meaning bypasses the text step entirely.
+Deepgram Nova-2 (used in ACARE) achieves WER ~5.5%. the platform direct audio-to-meaning bypasses the text step entirely.
 
 ---
 
@@ -228,23 +228,23 @@ Words that sound the same but have different meanings/spellings:
 **Solution**: Language model uses context to disambiguate. "I went to the beach to **sea** the ocean" — LM would correct to "see."
 
 ### Why This Matters
-ACARE operates in a medical environment (beeping monitors, fans, voices). The voice pipeline must handle this noise. SoundHound's automotive ASR must handle road noise, music, and multiple passengers talking.
+ACARE operates in a medical environment (beeping monitors, fans, voices). The voice pipeline must handle this noise. the platform automotive ASR must handle road noise, music, and multiple passengers talking.
 
 ---
 
-## 8. SoundHound Speech-to-Meaning
+## 8. the platform direct audio-to-meaning
 
 ### The Innovation
 
 Traditional ASR converts speech → text → meaning (3 steps, errors cascade).
 
-SoundHound skips the text step: speech → meaning directly.
+the platform skips the text step: speech → meaning directly.
 
 ```
 Traditional: Audio → Text → Meaning
                   WER errors     NLU errors
 
-SoundHound: Audio → Meaning
+the platform: Audio → Meaning
                   No intermediate text errors
 ```
 
@@ -256,7 +256,7 @@ SoundHound: Audio → Meaning
 4. **Compound queries**: "Find a Mexican restaurant near the office that's open now and has vegetarian options" — all understood as one query, not multiple passes
 
 ### Why This Matters
-This is SoundHound's core differentiator. Every competitor (Google, Alexa, Nuance) uses the traditional ASR→NLU pipeline. SoundHound's approach is fundamentally different and measurably better for complex queries.
+This is the platform core differentiator. Every competitor (Google, Alexa, Nuance) uses the traditional ASR→NLU pipeline. the platform approach is fundamentally different and measurably better for complex queries.
 
 ---
 
@@ -292,7 +292,7 @@ Audio: speaker output
 | **XTTS** | Excellent | Fast | Voice cloning support |
 
 ### Why This Matters
-ACARE uses edge-tts (cloud-based, high quality) with pyttsx3 fallback (local, lower quality). The TTS must respond quickly in a conversation — latency under 500ms is the target. SoundHound's voice AI includes proprietary TTS for natural-sounding responses.
+ACARE uses edge-tts (cloud-based, high quality) with pyttsx3 fallback (local, lower quality). The TTS must respond quickly in a conversation — latency under 500ms is the target. the platform voice AI includes proprietary TTS for natural-sounding responses.
 
 ---
 
@@ -340,7 +340,7 @@ NLU understands:
 ```
 
 ### Why This Matters
-ACARE's intent parser distinguishes "turn on the light" (command) from "is the light on?" (question). The robot must respond differently to each. SoundHound's NLU powers Amelia's understanding of customer requests.
+ACARE's intent parser distinguishes "turn on the light" (command) from "is the light on?" (question). The robot must respond differently to each. the platform NLU powers the platform understanding of customer requests.
 
 ---
 
@@ -382,7 +382,7 @@ def detect_intent(text):
 ```
 
 ### Why This Matters
-This is the core of Amelia's conversation routing. Bad intent detection = wrong responses. ACARE's intent parser must be near-perfect for safety-critical commands.
+This is the core of the platform conversation routing. Bad intent detection = wrong responses. ACARE's intent parser must be near-perfect for safety-critical commands.
 
 ---
 
@@ -529,7 +529,7 @@ Action: Confirm + Book
 ```
 
 ### Why This Matters
-Dialogue management separates "what to do" from "how to say it." This is critical for production voice AI. Amelia uses BPNs and automatas for dialogue management.
+Dialogue management separates "what to do" from "how to say it." This is critical for production voice AI. the platform uses workflow nodes and automatas for dialogue management.
 
 ---
 
@@ -582,7 +582,7 @@ def dialogue_policy(state):
 ```
 
 ### Why This Matters
-Dialogue policy can be hand-crafted (rules) or learned (RL). Simple systems use rules. Complex systems (like Amelia) use learned policies optimized for task completion rate.
+Dialogue policy can be hand-crafted (rules) or learned (RL). Simple systems use rules. Complex systems (like the platform) use learned policies optimized for task completion rate.
 
 ---
 
@@ -644,7 +644,7 @@ Managing the lifecycle of a conversation:
 4. **End**: User ends conversation, system saves state
 
 ### Why This Matters
-ACARE's voice pipeline has session management: 8-second initial silence timeout, 5-second mid-speech gap timeout, 10-minute conversation TTL. Amelia manages enterprise sessions that can last hours across channels.
+ACARE's voice pipeline has session management: 8-second initial silence timeout, 5-second mid-speech gap timeout, 10-minute conversation TTL. the platform manages enterprise sessions that can last hours across channels.
 
 ---
 
@@ -663,7 +663,7 @@ Multi-turn: System must remember what was said, handle topic shifts, correct mis
 - **Ambiguity**: "I want that one" — what's "that one"?
 
 ### Why This Matters
-ACARE's conversations are multi-turn (robot: "which tool?" user: "scissors"). SYNAPSE's reasoning pipeline processes multi-turn queries. Amelia handles enterprise multi-turn across voice and chat.
+ACARE's conversations are multi-turn (robot: "which tool?" user: "scissors"). SYNAPSE's reasoning pipeline processes multi-turn queries. the platform handles enterprise multi-turn across voice and chat.
 
 ---
 
@@ -681,7 +681,7 @@ A wake word ("Hey Siri," "Okay Google," "Alexa") activates the device. It's alwa
 4. False positives minimized by aggressive thresholds
 
 ### Why This Matters
-Wake words use VERY little power (specialized DSP chips). This is edge AI: the detection happens on-device, not in the cloud. SoundHound's automotive wake words work even with music playing and road noise.
+Wake words use VERY little power (specialized DSP chips). This is edge AI: the detection happens on-device, not in the cloud. the platform automotive wake words work even with music playing and road noise.
 
 ---
 
@@ -698,7 +698,7 @@ Finishes on:   Phone call → "Yes, I still need help with that bill"
 ```
 
 ### Why It Matters
-Amelia is an omnichannel platform. A customer might start on the website, switch to mobile, and escalate to a phone call — all within the same conversation. The system maintains context across channels.
+the platform is an omnichannel platform. A customer might start on the website, switch to mobile, and escalate to a phone call — all within the same conversation. The system maintains context across channels.
 
 ---
 
@@ -725,7 +725,7 @@ AI: "I can see your account. You have an outstanding balance of $45 from January
 Natural conversation, understands intent, resolves faster.
 
 ### Why This Matters
-Amelia replaces traditional IVR. SoundHound acquired Amelia (enterprise conversational AI) and SYNQ3 (restaurant voice AI). This is their core enterprise product.
+the platform replaces traditional IVR. the platform acquired the platform (enterprise conversational AI) and SYNQ3 (restaurant voice AI). This is their core enterprise product.
 
 ---
 
@@ -738,7 +738,7 @@ Amelia replaces traditional IVR. SoundHound acquired Amelia (enterprise conversa
 - **Offline**: Tunnels, garages, rural areas — no internet
 - **Integration**: Climate control, navigation, media, calls
 
-### SoundHound's Automotive Leadership
+### the platform Automotive Leadership
 
 - Pre-installed in many car brands (Honda, Hyundai, etc.)
 - Edge AI: processes voice locally, not in cloud
@@ -746,7 +746,7 @@ Amelia replaces traditional IVR. SoundHound acquired Amelia (enterprise conversa
   "Find the nearest Italian restaurant that's open now and has good reviews"
 
 ### Why This Matters
-SoundHound is the leader in automotive voice AI. This is their strongest differentiator vs Google and Alexa.
+The platform is a leader in automotive voice AI. This is their strongest differentiator vs Google and Alexa.
 
 ---
 
@@ -754,7 +754,7 @@ SoundHound is the leader in automotive voice AI. This is their strongest differe
 
 ### Plain Explanation
 
-Compound queries combine multiple requests in one sentence. Traditional systems fail; SoundHound's system parses them as one.
+Compound queries combine multiple requests in one sentence. Traditional systems fail; the platform system parses them as one.
 
 ### Example
 
@@ -767,24 +767,24 @@ Traditional system (3 separate queries):
 2. "Check if they have vegetarian options"
 3. "Check rating >= 4"
 
-SoundHound DMU: One query, all constraints understood together
+the platform DMU: One query, all constraints understood together
 → Fetches restaurants matching ALL conditions at once
 ```
 
 ### Why This Matters
-This is SoundHound's patented innovation. Competing systems require multiple turns for compound queries. SoundHound handles them in one go — faster, more natural.
+This is the platform patented innovation. Competing systems require multiple turns for compound queries. the platform handles them in one go — faster, more natural.
 
 ---
 
-## 30. Edge AI — SoundHound's NVIDIA GTC Demo
+## 30. Edge AI — the platform NVIDIA GTC Demo
 
 ### What is Edge AI
 
 Running AI models ON THE DEVICE, not in the cloud. No internet needed.
 
-### SoundHound's Edge Demo
+### the platform Edge Demo
 
-At NVIDIA GTC, SoundHound demonstrated voice AI running entirely on an NVIDIA DRIVE platform in a car — no cloud connectivity.
+At NVIDIA GTC, the platform demonstrated voice AI running entirely on an NVIDIA DRIVE platform in a car — no cloud connectivity.
 
 ### Why Edge AI Matters
 
@@ -829,7 +829,7 @@ This is ACARE's architecture too — the robot runs inference locally (YOLO on P
 - **Cross-channel**: Same speaker on different microphones still matches
 
 ### Why This Matters
-ACARE uses voice authentication (speaker verification) to ensure only authorized staff can command the robot. SoundHound uses speaker recognition for personalization ("Welcome back, John").
+ACARE uses voice authentication (speaker verification) to ensure only authorized staff can command the robot. the platform uses speaker recognition for personalization ("Welcome back, John").
 
 ---
 
@@ -886,7 +886,7 @@ Sound arrives at each mic at slightly different times. By calculating these time
 - Cancel sound from other directions (TV, traffic, other people)
 
 ### Why This Matters
-SoundHound's automotive system uses beamforming with microphone arrays. The driver's voice is amplified, passenger and road noise are cancelled.
+the platform automotive system uses beamforming with microphone arrays. The driver's voice is amplified, passenger and road noise are cancelled.
 
 ---
 
@@ -911,7 +911,7 @@ SoundHound's automotive system uses beamforming with microphone arrays. The driv
 4. Label clusters as Speaker A, B, C...
 
 ### Why This Matters
-ACARE's robot might hear two people in the room. Diarization ensures it responds to the correct person. Amelia uses diarization to separate agent speech from customer speech in call recordings.
+ACARE's robot might hear two people in the room. Diarization ensures it responds to the correct person. the platform uses diarization to separate agent speech from customer speech in call recordings.
 
 ---
 
@@ -945,11 +945,11 @@ VAD is the gatekeeper. Bad VAD = false starts (system thinks you're speaking whe
 
 ---
 
-## 38-45. Amelia Platform
+## 38-45. the platform Platform
 
-### 38. What is Amelia
+### 38. What is the platform
 
-Amelia is SoundHound's enterprise AI platform for customer service. It's a complete conversational AI system that handles phone calls, chat, email, and SMS.
+the platform is the platform enterprise AI platform for customer service. It's a complete conversational AI system that handles phone calls, chat, email, and SMS.
 
 **Capabilities**:
 - Natural conversation (not press-1-for-menu)
@@ -957,7 +957,7 @@ Amelia is SoundHound's enterprise AI platform for customer service. It's a compl
 - Handoff to human agents when needed
 - Analytics and reporting
 
-### 39. Amelia Ontologies
+### 39. the platform Ontologies
 
 An ontology is a structured map of knowledge for a specific domain.
 
@@ -970,11 +970,11 @@ Ontology includes:
   - Actions: upgrade_plan, report_issue, pay_bill
 ```
 
-**Why it matters**: The ontology is what Amelia "knows" about your business. Without it, the AI has no understanding of your domain.
+**Why it matters**: The ontology is what the platform "knows" about your business. Without it, the AI has no understanding of your domain.
 
-### 40. Amelia BPNs (Business Process Nodes)
+### 40. the platform workflow nodes (Business Process Nodes)
 
-BPNs define step-by-step workflows for handling tasks.
+workflow nodes define step-by-step workflows for handling tasks.
 
 ```yaml
 Process: Reset Password
@@ -985,9 +985,9 @@ Process: Reset Password
   5. If failed: escalate to human agent
 ```
 
-**Why it matters**: BPNs are deterministic — they always follow the same steps. This ensures compliance and reliability.
+**Why it matters**: workflow nodes are deterministic — they always follow the same steps. This ensures compliance and reliability.
 
-### 41. Amelia Autmatas
+### 41. the platform Autmatas
 
 Automatas are state machines for conversation flow.
 
@@ -1027,14 +1027,14 @@ Orchestration Layer (routing, session management)
          ↓
 NLU Engine (intent detection, entity extraction)
          ↓
-Dialogue Management (BPNs, automatas, state)
+Dialogue Management (workflow nodes, automatas, state)
          ↓
 Backend Integrations (CRM, billing, ticketing)
          ↓
 Human Agent Handoff (when AI can't resolve)
 ```
 
-### 44. Configuring Intents in Amelia
+### 44. Configuring Intents in the platform
 
 1. Define intent name: "RESET_PASSWORD"
 2. Provide training phrases:
@@ -1042,12 +1042,12 @@ Human Agent Handoff (when AI can't resolve)
    - "I can't log in"
    - "Reset my account password"
    - "I need a new password"
-3. Link to BPN: ResetPassword process
+3. Link to workflow nodes: ResetPassword process
 4. Test and iterate
 
-### 45. Amelia 7 — Agentic+ Framework (CORRECTED)
+### 45. the platform — orchestration framework Framework (CORRECTED)
 
-Amelia 7's Agentic+ framework is NOT "BPNs + LLM agents." It's a multi-agent orchestration framework built on three layers:
+the platform orchestration framework framework is NOT "workflow nodes + LLM agents." It's a multi-agent orchestration framework built on three layers:
 
 ```mermaid
 flowchart TB
@@ -1079,7 +1079,7 @@ Example: Customer says "I lost my card":
 
 The agent doesn't follow a script — it figures out the path dynamically.
 
-### 45a. Agentic+ Key Concepts
+### 45a. orchestration framework Key Concepts
 
 | Concept | What It Is | Example |
 |---------|-----------|---------|
@@ -1090,10 +1090,10 @@ The agent doesn't follow a script — it figures out the path dynamically.
 | **MCP** | Standard tool integration protocol | Connect to CRM, ERP, ticketing systems |
 | **Agent Console** | AI companion for human reps | Suggests responses during live calls |
 
-### 45b. Amelia 7 Features
+### 45b. the platform Features
 
 - **Omnichannel**: voice, chat, messaging, web, in-app — all first-class
-- **Speech-to-Meaning (Polaris)**: proprietary ASR, 200+ patents, audio → meaning directly
+- **direct audio-to-meaning (Polaris)**: proprietary ASR, 200+ patents, audio → meaning directly
 - **LLM agnostic**: can use any LLM provider
 - **Pre-built catalog**: banking, healthcare, insurance, IT service desk templates
 - **Analytics**: conversation flow visualization, problem-location detection, NPS
@@ -1102,13 +1102,13 @@ The agent doesn't follow a script — it figures out the path dynamically.
 
 ---
 
-### 46. What a Cognitive Implementation Engineer Actually Does with Amelia
+### 46. What a an implementation engineer Actually Does with the platform
 
-This section is written specifically for the SoundHound Cognitive Implementation Engineer role.
+This section is written specifically for the the platform an implementation engineer role.
 
-**Your job as a Cognitive Implementation Engineer:**
+**Your job as a an implementation engineer:**
 
-You are the bridge between Amelia's platform capabilities and the client's business needs. You don't build Amelia from scratch — you configure it for each client.
+You are the bridge between the platform platform capabilities and the client's business needs. You don't build the platform from scratch — you configure it for each client.
 
 #### a) Transversal Analysis → Design
 
@@ -1122,13 +1122,13 @@ You perform: Transversal Analysis
    - Conversation patterns and flows)
          ↓
 You produce: Architecture Blueprint
-  (which intents to build, which BPNs needed,
+  (which intents to build, which workflow nodes needed,
    which systems to integrate, priority order)
 ```
 
 #### b) Ontology Configuration
 
-An ontology is Amelia's knowledge of the client's business domain:
+An ontology is the platform knowledge of the client's business domain:
 
 ```yaml
 Domain: Telecommunications
@@ -1149,14 +1149,14 @@ Ontology actions:
   - report_issue(account_number, issue_description)
 ```
 
-You define these in Amelia's ontology editor. The more accurate the ontology, the better Amelia understands client conversations.
+You define these in the platform ontology editor. The more accurate the ontology, the better the platform understands client conversations.
 
-#### c) BPN Development
+#### c) workflow nodes Development
 
-BPNs are the step-by-step workflows for handling tasks. You build them in Amelia's visual BPN designer:
+workflow nodes are the step-by-step workflows for handling tasks. You build them in the platform visual workflow nodes designer:
 
 ```
-BPN: "Reset Password"
+workflow nodes: "Reset Password"
 
 Step 1: Verify identity
   → "Please provide your account number or registered email"
@@ -1194,10 +1194,10 @@ Each state has:
 
 #### e) Integration Development
 
-You write code (Java/JS/Groovy) connecting Amelia to client backend systems:
+You write code (Java/JS/Groovy) connecting the platform to client backend systems:
 
 ```java
-// Example: Amelia integration webhook (Java)
+// Example: the platform integration webhook (Java)
 @Path("/integrations/order-status")
 public class OrderStatusIntegration {
     
@@ -1208,7 +1208,7 @@ public class OrderStatusIntegration {
         // Call client's order management API
         Order order = orderManagementClient.getOrder(request.getOrderId());
         
-        // Return structured response Amelia can use
+        // Return structured response the platform can use
         return Response.ok(new OrderResponse(
             order.getStatus(),
             order.getEstimatedDelivery(),
@@ -1220,7 +1220,7 @@ public class OrderStatusIntegration {
 
 #### f) Testing and Iteration
 
-- **Functional testing**: Does Amelia handle each intent correctly?
+- **Functional testing**: Does the platform handle each intent correctly?
 - **Stress testing**: Can it handle peak volume?
 - **Edge case testing**: What happens with unexpected inputs?
 - **Client UAT**: Client validates against their requirements
@@ -1229,9 +1229,9 @@ public class OrderStatusIntegration {
 #### g) Reusability
 
 After deployment, you identify patterns that can be standardized:
-- "I see we built a 'verify identity' BPN for this client — let's make it reusable"
+- "I see we built a 'verify identity' workflow nodes for this client — let's make it reusable"
 - "This billing integration pattern could apply to 3 other clients"
 - Feed improvements back to R&D for product-wide standardization
 
 ### Why This Matters
-This IS the Cognitive Implementation Engineer role. Every topic above — ontologies, BPNs, automatas, integrations, testing — is what you'll do daily. Study this section carefully.
+This IS the an implementation engineer role. Every topic above — ontologies, workflow nodes, automatas, integrations, testing — is what you'll do daily. Study this section carefully.

@@ -3,9 +3,9 @@
 > **Target**: Knows basic Python syntax. New to DSA.
 > **Goal**: Recognize patterns, not memorize solutions. Write optimal code confidently.
 
-## SoundHound-Specific Coding Questions (From Real Interviews)
+## the platform-Specific Coding Questions (From Real Interviews)
 
-**Source**: CodeJeet, Taro, AmbitionBox — confirmed SoundHound LeetCode problems:
+**Source**: CodeJeet, Taro, AmbitionBox — confirmed the platform LeetCode problems:
 
 | Problem | Difficulty | Topics | Pattern |
 |---------|-----------|--------|---------|
@@ -13,7 +13,7 @@
 | Linked List in Binary Tree | Medium | Linked List, Tree, DFS | Tree + LinkedList |
 | First Missing Positive | Hard | Array, Hash Table | Hash map |
 
-Additionally from past Cognitive Implementation Engineer interviews:
+Additionally from past an implementation engineer interviews:
 - Basic logic building puzzles
 - Simple coding in language of your choice (Java/JS/Python)
 - String manipulation

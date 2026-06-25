@@ -1,7 +1,7 @@
 # Backend & System Design — From Code to Architecture
 
 > **Target**: Knows basic Python. No production backend experience.
-> **Goal**: Understand every backend pattern needed for SoundHound-level system design.
+> **Goal**: Understand every backend pattern needed for the platform-level system design.
 
 ---
 
@@ -64,7 +64,7 @@ POST   /createUserRecord   # use POST /users
 ```
 
 ### Why This Matters
-Consistent URL patterns make your API predictable. SoundHound's APIs follow REST conventions. Interviewers check if you know RESTful design.
+Consistent URL patterns make your API predictable. the platform APIs follow REST conventions. Interviewers check if you know RESTful design.
 
 ---
 
@@ -258,7 +258,7 @@ Clients upgrade at their own pace. Old clients keep using v1. New clients use v2
 | Query param | `/users?version=2` | Simple | Clutters URL |
 
 ### Why This Matters
-ROAST has one version. SYNAPSE uses `/api/v1/`. SoundHound's Amelia API versions for enterprise clients who need stability.
+ROAST has one version. SYNAPSE uses `/api/v1/`. the platform the platform API versions for enterprise clients who need stability.
 
 ---
 
@@ -765,7 +765,7 @@ Client → GET /api/session/{id}/state (poll every 5s until complete)
 ```
 
 ### Why This Matters
-ROAST uses WebSocket for real-time resume analysis streaming. SuperOwl uses it for live call transcripts. SoundHound's voice AI uses it for bidirectional audio streaming.
+ROAST uses WebSocket for real-time resume analysis streaming. SuperOwl uses it for live call transcripts. the platform voice AI uses it for bidirectional audio streaming.
 
 ---
 
@@ -974,7 +974,7 @@ for message in pubsub.listen():
 ```
 
 ### Why This Matters
-SoundHound's architecture uses Pub/Sub extensively (Google Pub/Sub is the backbone). Understanding this pattern is essential for designing scalable voice AI systems.
+the platform architecture uses Pub/Sub extensively (Google Pub/Sub is the backbone). Understanding this pattern is essential for designing scalable voice AI systems.
 
 ---
 
@@ -1055,7 +1055,7 @@ def get_orders(tenant_id, current_user):
 ```
 
 ### Why This Matters
-SuperOwl is multi-tenant (each business is a tenant). SYNAPSE could be multi-tenant (different domains). SoundHound's Amelia serves multiple enterprise customers with strict data isolation.
+SuperOwl is multi-tenant (each business is a tenant). SYNAPSE could be multi-tenant (different domains). the platform the platform serves multiple enterprise customers with strict data isolation.
 
 ---
 
@@ -1212,7 +1212,7 @@ When you choose between eventual consistency and strong consistency, you're appl
 
 ---
 
-# PART 6: ENTERPRISE INTEGRATION PATTERNS (For Amelia / Cognitive Implementation)
+# PART 6: ENTERPRISE INTEGRATION PATTERNS (For the platform / Implementation)
 
 ## 46. Webhook Pattern
 
@@ -1223,16 +1223,16 @@ Instead of polling for updates, the system sends an HTTP request to a URL when s
 ### Flow
 
 ```
-Amelia detects a customer wants to check order status
+the platform detects a customer wants to check order status
       ↓
-Amelia calls your webhook: POST /webhooks/order-status
+the platform calls your webhook: POST /webhooks/order-status
 Body: {"customer_id": "123", "order_id": "ORD-456"}
       ↓
 Your system looks up the order in the enterprise DB
       ↓
 Your system responds: {"status": "shipped", "eta": "2026-06-25"}
       ↓
-Amelia tells the customer: "Your order has been shipped and will arrive June 25th."
+the platform tells the customer: "Your order has been shipped and will arrive June 25th."
 ```
 
 ### Code Example
@@ -1244,7 +1244,7 @@ app = FastAPI()
 
 @app.post("/webhooks/order-status")
 async def handle_order_status(request: Request):
-    """Called by Amelia when a customer asks about their order"""
+    """Called by the platform when a customer asks about their order"""
     data = await request.json()
     customer_id = data["customer_id"]
     order_id = data["order_id"]
@@ -1254,7 +1254,7 @@ async def handle_order_status(request: Request):
         "SELECT status, eta FROM orders WHERE id = ?", order_id
     )
     
-    # Return structured response — Amelia will use it to reply
+    # Return structured response — the platform will use it to reply
     return {
         "status": order["status"],
         "eta": order["eta"],
@@ -1265,7 +1265,7 @@ async def handle_order_status(request: Request):
 
 @app.post("/webhooks/ticket-create")
 async def create_ticket(request: Request):
-    """Called by Amelia when a customer requests human support"""
+    """Called by the platform when a customer requests human support"""
     data = await request.json()
     # Create ticket in ServiceNow / Jira / Zendesk
     ticket_id = await servicenow.create_ticket(
@@ -1277,7 +1277,7 @@ async def create_ticket(request: Request):
 ```
 
 ### Why This Matters
-This is EXACTLY what Cognitive Implementation Engineers build — webhooks that connect Amelia to enterprise systems (CRM, ticketing, billing, order management).
+This is EXACTLY what implementation engineers build — webhooks that connect the platform to enterprise systems (CRM, ticketing, billing, order management).
 
 ---
 
@@ -1285,29 +1285,29 @@ This is EXACTLY what Cognitive Implementation Engineers build — webhooks that 
 
 ### Why Needed
 
-Enterprise clients have existing systems (Salesforce, ServiceNow, custom databases). Amelia can't call them all directly. You build a **translation layer**.
+Enterprise clients have existing systems (Salesforce, ServiceNow, custom databases). the platform can't call them all directly. You build a **translation layer**.
 
 ```
-Amelia → Your Integration API → Enterprise System
+the platform → Your Integration API → Enterprise System
 ```
 
 ```python
-# Your integration service translates Amelia's standard requests
+# Your integration service translates the platform standard requests
 # into enterprise-specific API calls
 
 @app.post("/integrations/servicenow/create-ticket")
 async def sn_create_ticket(customer_name: str, issue: str, severity: str):
     """
-    Translates Amelia's request into ServiceNow's specific API format
+    Translates the platform request into ServiceNow's specific API format
     """
-    # Map Amelia's severity to ServiceNow's priority
+    # Map the platform severity to ServiceNow's priority
     priority_map = {"low": 3, "medium": 2, "high": 1}
     
     payload = {
         "caller_id": customer_name,
         "short_description": issue,
         "priority": priority_map.get(severity, 3),
-        "category": "Amelia Generated",
+        "category": "the platform Generated",
     }
     
     # Call ServiceNow's REST API
@@ -1321,11 +1321,11 @@ async def sn_create_ticket(customer_name: str, issue: str, severity: str):
 ```
 
 ### Why This Matters
-This is the core of the Cognitive Implementation Engineer's integration work. You don't build Amelia — you build the glue between Amelia and the client's systems.
+This is the core of the an implementation engineer's integration work. You don't build the platform — you build the glue between the platform and the client's systems.
 
 ---
 
-## 48. State Machine Pattern (Amelia Automatas)
+## 48. State Machine Pattern (the platform Automatas)
 
 ### Why State Machines for Conversation
 
@@ -1387,7 +1387,7 @@ class ConversationStateMachine:
 ```
 
 ### Why This Matters
-Amelia automatas ARE state machines. Understanding state machines = understanding how Amelia works under the hood. Your LangGraph experience (SYNAPSE) IS state machine expertise — mention it.
+the platform automatas ARE state machines. Understanding state machines = understanding how the platform works under the hood. Your LangGraph experience (SYNAPSE) IS state machine expertise — mention it.
 
 ---
 

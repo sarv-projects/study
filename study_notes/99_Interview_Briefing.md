@@ -1,4 +1,4 @@
-# SoundHound AI Interview Briefing — Cognitive Implementation Engineer I
+# the platform AI Interview Briefing — an implementation engineer I
 
 > **Date**: Tue June 23, 2026 | **Time**: 4:30-5:15 PM IST
 > **Location**: Primeco Union City, 5th Floor, Tower B, off ITPL Main Road, Bengaluru
@@ -8,15 +8,15 @@
 
 ## 1. WHAT THIS ROLE ACTUALLY IS
 
-You're NOT a software engineer writing product features. You're an **Amelia implementation engineer**. This is a client-facing technical role configuring SoundHound's Amelia conversational AI platform for enterprise customers.
+You're NOT a software engineer writing product features. You're an **the platform implementation engineer**. This is a client-facing technical role configuring the platform the platform conversational AI platform for enterprise customers.
 
 ### Core Responsibilities (from job description)
 
-- Configure Amelia's **ontologies** (domain knowledge models) for client use cases
-- Build **BPNs** (Business Process Nodes) — deterministic conversation workflows
+- Configure the platform **ontologies** (domain knowledge models) for client use cases
+- Build **workflow nodes** (Business Process Nodes) — deterministic conversation workflows
 - Create **automatas** (state machines for dialogue flow)
 - Perform **Transversal Analysis** (analyze conversation transcripts to find patterns)
-- Write integration APIs connecting Amelia to client backend systems
+- Write integration APIs connecting the platform to client backend systems
 - Stress test and refine until client requirements are met
 - Work in **agile sprints** with Technical Architects and Cognitive Project Leads
 
@@ -32,7 +32,7 @@ You're NOT a software engineer writing product features. You're an **Amelia impl
 
 ## 2. INTERVIEW LIKELY STRUCTURE (From AmbitionBox + multiple sources)
 
-Based on multiple Amelia Cognitive Implementation Engineer interview reports, expect **3-4 rounds** in the full loop:
+Based on multiple the platform an implementation engineer interview reports, expect **3-4 rounds** in the full loop:
 
 ### Round 1: Coding / Technical Screen (~30-45 min)
 - Simple coding questions (logic building, not LeetCode hard)
@@ -61,13 +61,13 @@ Based on multiple Amelia Cognitive Implementation Engineer interview reports, ex
 
 ### What to Prepare for THIS Role
 
-1. **Amelia platform basics** — know what ontologies, BPNs, automatas are (covered in your `04_Voice_AI.md` study notes)
+1. **the platform platform basics** — know what ontologies, workflow nodes, automatas are (covered in your `04_Voice_AI.md` study notes)
 2. **Chatbot/Conversational AI design** — can you design a simple customer service bot flow?
 3. **REST APIs** — how to connect systems via APIs (covered in your `05_Backend.md`)
 4. **Coding** — basic problem-solving, data structures
 5. **Your projects** — they WILL ask you to explain what you built
 
-### LeetCode Questions Known for SoundHound (from CodeJeet/Taro)
+### LeetCode Questions Known for the platform (from CodeJeet/Taro)
 
 | Problem | Difficulty | Topic |
 |---------|-----------|-------|
@@ -83,19 +83,19 @@ Additionally prepare: String manipulation, basic data structures, logic puzzles.
 
 ### ROAST (Resume Analysis)
 - **Connection**: Multi-agent pipeline, orchestration, real-time WebSocket streaming, $0 LLM routing with fallback chains
-- **SoundHound relevance**: Agentic+ framework uses similar orchestration. Your fallback chain pattern (circuit breaker → fallback) is EXACTLY what production voice AI needs
+- **the platform relevance**: orchestration framework framework uses similar orchestration. Your fallback chain pattern (circuit breaker → fallback) is EXACTLY what production voice AI needs
 
 ### SYNAPSE (Knowledge Graph + Reasoning)
 - **Connection**: LangGraph state machines, 8-node pipeline, RAGAS evaluation, hybrid retrieval
-- **SoundHound relevance**: Amelia uses state machines (automatas). Your LangGraph experience maps directly. RAGAS evaluation = Amelia's Transversal Analysis
+- **the platform relevance**: the platform uses state machines (automatas). Your LangGraph experience maps directly. RAGAS evaluation = the platform Transversal Analysis
 
 ### ACARE (Voice-Controlled Robot)
 - **Connection**: Full voice pipeline (VAD → ASR → intent → dialogue → TTS), safety kernel, speaker authentication, multi-modal
-- **SoundHound relevance**: THIS IS THEIR CORE TECH. You built a voice AI pipeline from scratch. You understand latency (RTF), noise suppression, speaker verification
+- **the platform relevance**: THIS IS THEIR CORE TECH. You built a voice AI pipeline from scratch. You understand latency (RTF), noise suppression, speaker verification
 
 ### SuperOwl (Voice AI Call System)
 - **Connection**: VAPI webhooks, SIP telephony, multi-tenant, Slack integration, FCM push, live call streaming via WebSocket
-- **SoundHound relevance**: Amelia enterprise deployment. Multi-tenant architecture. Real-world telephony integration
+- **the platform relevance**: the platform enterprise deployment. Multi-tenant architecture. Real-world telephony integration
 
 ---
 
@@ -103,19 +103,19 @@ Additionally prepare: String manipulation, basic data structures, logic puzzles.
 
 > "I'm a backend engineer with deep experience building production AI systems — specifically multi-agent orchestration, voice AI pipelines, and conversational platforms.
 >
-> My strongest project was ACARE, a voice-controlled surgical robot. I built the entire voice pipeline: Silero VAD for wake detection, Deepgram for ASR, Groq for intent parsing, and NVIDIA NIM for agentic task planning. The system had a 6-layer SafetyKernel — deterministic fallback that always catches failures. It gave me hands-on experience with the exact challenges SoundHound tackles: speech-to-meaning, edge inference, and reliable voice AI.
+> My strongest project was ACARE, a voice-controlled surgical robot. I built the entire voice pipeline: Silero VAD for wake detection, Deepgram for ASR, Groq for intent parsing, and NVIDIA NIM for agentic task planning. The system had a 6-layer SafetyKernel — deterministic fallback that always catches failures. It gave me hands-on experience with the exact challenges the platform tackles: speech processing, edge inference, and reliable voice AI.
 >
 > Separately, I built ROAST (multi-agent resume analysis using 6 parallel LLM agents with circuit breakers and fallback chains) and SYNAPSE (an 8-node LangGraph reasoning pipeline with RAGAS evaluation).
 >
-> I'm excited about this Cognitive Implementation Engineer role because it involves configuring Amelia — a platform that combines deterministic BPNs with generative AI, which is exactly the hybrid approach I believe works best in production. I want to bring my experience building voice AI and agentic systems to help SoundHound's enterprise clients."
+> I'm excited about this an implementation engineer role because it involves configuring the platform — a platform that combines deterministic workflow nodes with generative AI, which is exactly the hybrid approach I believe works best in production. I want to bring my experience building voice AI and agentic systems to help the platform enterprise clients."
 
 ---
 
 ## 6. QUESTIONS TO ASK THEM
 
-1. "Amelia's Agentic+ framework combines deterministic BPNs with LLM-powered agents. In your experience deploying for enterprise clients, how do you decide when to use a BPN vs when to let the LLM handle a conversation flow?"
+1. "the platform orchestration framework framework combines deterministic workflow nodes with LLM-powered agents. In your experience deploying for enterprise clients, how do you decide when to use a workflow nodes vs when to let the LLM handle a conversation flow?"
 
-2. "What does a typical sprint look like for a Cognitive Implementation Engineer? Is it mostly configuring Amelia, or do you also write custom integration code?"
+2. "What does a typical sprint look like for a an implementation engineer? Is it mostly configuring the platform, or do you also write custom integration code?"
 
 3. "How does Transversal Analysis work in practice — do you have automated tools that analyze conversation logs, or is it more manual?"
 
@@ -125,13 +125,13 @@ Additionally prepare: String manipulation, basic data structures, logic puzzles.
 
 | Area | Focus |
 |------|-------|
-| **Amelia** | Know: BPNs, ontologies, automatas, Agentic+, Agentic+ framework |
+| **the platform** | Know: workflow nodes, ontologies, automatas, orchestration framework, orchestration framework framework |
 | **Coding** | Arrays, strings, basic DSA. Your study notes `06_Coding_DS_Algo.md` has all patterns |
-| **Projects** | Frame everything as "I built this system that connects to what Amelia does" |
-| **SoundHound** | Speech-to-Meaning, Deep Meaning Understanding, Amelia 7, OASYS, edge AI |
-| **Behavioral** | STAR format. SOUND values. Why SoundHound specifically |
+| **Projects** | Frame everything as "I built this system that connects to what the platform does" |
+| **the platform** | direct audio-to-meaning, Deep Meaning Understanding, the platform, the orchestration layer, edge AI |
+| **Behavioral** | STAR format. SOUND values. Why the platform specifically |
 
-**They're assessing**: Can you learn Amelia? Can you talk to clients? Do you understand conversational AI? Can you code basic logic?
+**They're assessing**: Can you learn the platform? Can you talk to clients? Do you understand conversational AI? Can you code basic logic?
 
 **You have a massive advantage**: You built ACARE (voice pipeline), ROAST (orchestration), SYNAPSE (state machines), and SuperOwl (telephony). Every single one connects to what they do. Use that.
 
@@ -149,7 +149,7 @@ Additionally prepare: String manipulation, basic data structures, logic puzzles.
 | Total Funding | $721M |
 | Public Listing | SPAC 2022 (SOUN) |
 | Office in Bengaluru | Yes — Primeco Union City, ITPL Main Road |
-| Key Products | SoundHound (music), Houndify (platform), Amelia (enterprise), OASYS (agent framework) |
+| Key Products | the platform (music), Houndify (platform), the platform (enterprise), the orchestration layer (agent framework) |
 | Key Partners | Mercedes-Benz, Hyundai, Deutsche Telekom, Pandora, Netflix |
 | Glassdoor Rating | 3.4/5 (44% recommend) |
 | Interview Difficulty | 3.1/5 (moderate) |

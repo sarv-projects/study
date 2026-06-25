@@ -66,7 +66,7 @@ def softmax_with_temperature(scores, temperature=1.0):
 - Creative writing: temperature 0.7-0.9 (some variance — you want interesting prose)
 - Customer service: temperature 0.3-0.5 (balanced — consistent but not robotic)
 
-**SoundHound connection**: "Amelia's Agentic+ uses low temperature for deterministic BPN workflows (you don't want the AI improvising on a refund policy) and higher temperature for generative conversations where variety improves the customer experience."
+**the platform connection**: "the platform orchestration framework uses low temperature for deterministic workflow nodes workflows (you don't want the AI improvising on a refund policy) and higher temperature for generative conversations where variety improves the customer experience."
 
 ---
 
@@ -107,7 +107,7 @@ for param in model.parameters():
 - Requires 10,000+ GPUs running for weeks
 - Memory: activations for all layers must be stored (hundreds of GB per GPU)
 
-**SoundHound connection**: "Amelia's intent models are fine-tuned using the same gradient descent process, just at a smaller scale. Pre-trained transformer encoders are adapted to client-specific intents by continuing gradient descent on labeled utterances — this is called fine-tuning, and it takes hours not weeks."
+**the platform connection**: "the platform intent models are fine-tuned using the same gradient descent process, just at a smaller scale. Pre-trained transformer encoders are adapted to client-specific intents by continuing gradient descent on labeled utterances — this is called fine-tuning, and it takes hours not weeks."
 
 ---
 
@@ -169,7 +169,7 @@ supervised_examples = [
 
 RLHF (Reinforcement Learning from Human Feedback) adds a supervised step AFTER pre-training — humans rank model outputs, and a reward model learns those preferences. But the foundation is self-supervised.
 
-**SoundHound connection**: "Amelia's intent training uses supervised learning (humans label example utterances). But the underlying Speech-to-Meaning model is self-supervised — it learns to map audio to meaning directly from unlabeled speech data, which is why SoundHound's system has been improving for 20 years without requiring constant manual annotation."
+**the platform connection**: "the platform intent training uses supervised learning (humans label example utterances). But the underlying direct audio-to-meaning model is self-supervised — it learns to map audio to meaning directly from unlabeled speech data, which is why the platform system has been improving for 20 years without requiring constant manual annotation."
 
 ---
 
@@ -186,7 +186,7 @@ RLHF (Reinforcement Learning from Human Feedback) adds a supervised step AFTER p
 ### What NOT to Mention (Unless They Ask)
 
 - Don't derive backpropagation formulas — it wastes interview time and they're testing concept understanding, not calculus
-- Don't explain Q-Learning — it's unrelated to the LLM/RAG/Agentic work the CIE role does
+- Don't explain Q-Learning — it's unrelated to the LLM/RAG/Agentic work the implementation role does
 - Don't recite vocabulary sizes or model parameter counts without context — connect every number to a design decision
 
 ---
@@ -1598,35 +1598,35 @@ flowchart LR
 
 ---
 
-## 10.10 OASYS — SoundHound's Open Agent System
+## 10.10 the orchestration layer — the platform Open Agent System
 
-OASYS = Open Agent System. Launched May 2026 at SoundHound's "Bring Your Own Model" event.
+the orchestration layer = Open Agent System. Launched May 2026 at the platform "Bring Your Own Model" event.
 
 ### What It Is
 
-OASYS is SoundHound's agent orchestration platform. It lets you **connect any LLM** to Amelia's enterprise capabilities:
+the orchestration layer is the platform agent orchestration platform. It lets you **connect any LLM** to the platform enterprise capabilities:
 
 ```mermaid
 graph LR
-    subgraph "OASYS Architecture"
-        LLM1["Any LLM<br/>GPT, Claude, Gemini,<br/>Open-source model"] --> OAS["OASYS Layer"]
-        OAS --> AM["Amelia Capabilities<br/>Speech-to-Meaning<br/>Cognitive Functions<br/>Guardrails"]
+    subgraph "the orchestration layer Architecture"
+        LLM1["Any LLM<br/>GPT, Claude, Gemini,<br/>Open-source model"] --> OAS["the orchestration layer Layer"]
+        OAS --> AM["the platform Capabilities<br/>direct audio-to-meaning<br/>Cognitive Functions<br/>Guardrails"]
         OAS --> ENTERPRISE["Enterprise Integrations<br/>CRM, ERP, APIs,<br/>Databases"]
     end
 ```
 
-### Why OASYS Matters
+### Why the orchestration layer Matters
 
-| Problem | OASYS Solution |
+| Problem | the orchestration layer Solution |
 |---------|---------------|
 | **Locked to one LLM** | Bring your own model — any provider |
-| **Can't use Amelia's voice** | Amelia's Speech-to-Meaning + your LLM |
-| **Enterprise security concerns** | Amelia's guardrails apply to ANY model |
-| **Expensive per-token costs** | OASYS supports cheaper specialized models |
+| **Can't use the platform voice** | the platform direct audio-to-meaning + your LLM |
+| **Enterprise security concerns** | the platform guardrails apply to ANY model |
+| **Expensive per-token costs** | the orchestration layer supports cheaper specialized models |
 
 ### In Interview Terms
 
-When they ask about OASYS: "OASYS is SoundHound's model-agnostic agent platform. It decouples the LLM from the enterprise infrastructure — you can use GPT-4 for reasoning, but route voice through Amelia's Speech-to-Meaning for latency. This gives enterprises flexibility without rebuilding their integration layer."
+When they ask about the orchestration layer: "the orchestration layer is the platform model-agnostic agent platform. It decouples the LLM from the enterprise infrastructure — you can use GPT-4 for reasoning, but route voice through the platform direct audio-to-meaning for latency. This gives enterprises flexibility without rebuilding their integration layer."
 
 **Connection to your work**: SuperOwl's pluggable provider system (Groq primary, Gemini fallback, NIM, OpenRouter) is the same pattern — you abstracted the LLM layer so the system doesn't depend on any single provider.
 
@@ -1703,17 +1703,17 @@ Agent needs to check a file:
 6. Agent uses the content in its reasoning
 ```
 
-**Why MCP matters for SoundHound**: Amelia 7.3 has first-class MCP support in its Agentic+ framework. Any MCP-compatible tool can be plugged into an Amelia agent without custom integration code. You build the MCP server once, and every Amelia agent can use it.
+**Why MCP matters for the platform**: the platform.3 has first-class MCP support in its orchestration framework framework. Any MCP-compatible tool can be plugged into an the platform agent without custom integration code. You build the MCP server once, and every the platform agent can use it.
 
 ---
 
-## 10.12 Agentic+ — SoundHound's 3-Layer Architecture
+## 10.12 orchestration framework — the platform 3-Layer Architecture
 
-Agentic+ is SoundHound's multi-agent orchestration framework in Amelia 7. It has exactly **3 layers**:
+orchestration framework is the platform multi-agent orchestration framework in the platform. It has exactly **3 layers**:
 
 ```mermaid
 flowchart TD
-    subgraph "Agentic+ 3-Layer Architecture"
+    subgraph "orchestration framework 3-Layer Architecture"
         L1["Layer 1: Entities<br/>Business domain nouns<br/>Account, Order, Device, Ticket"]
         L2["Layer 2: Cognitive Functions<br/>Atomic action verbs<br/>checkBalance(), resetPassword()"]
         L3["Layer 3: AI Agents<br/>Dynamic orchestrators<br/>Listens → Reasons → Acts → Adapts"]
@@ -1760,7 +1760,7 @@ blockCard(card_id)               → blocks card
 
 ### Layer 3: AI Agents (The Orchestrators)
 
-This is where Agentic+ shines. Instead of rigid scripts ("if user says X, do Y"), the AI agent:
+This is where orchestration framework shines. Instead of rigid scripts ("if user says X, do Y"), the AI agent:
 
 ```
 Customer: "I lost my credit card"
@@ -1782,7 +1782,7 @@ Agent's internal process:
 
 ### Why This Maps to Your Work
 
-| Agentic+ Concept | Your SuperOwl Equivalent |
+| orchestration framework Concept | Your SuperOwl Equivalent |
 |-----------------|-------------------------|
 | **Entities** | Business configs: prompt modes, routing rules |
 | **Cognitive Functions** | Tools: `notify_owner()`, `endCall()`, `transferCall()` |

@@ -837,7 +837,7 @@ An agent is a system that can PERCEIVE its environment, REASON about what to do,
 | **Complexity** | Simple | Complex (orchestration, error handling) |
 
 ### Why This Matters
-The SoundHound role is about BUILDING agents, not chatbots. Amelia is an enterprise agent platform. OASYS is an agent framework. Understanding the difference is table stakes.
+The the platform role is about BUILDING agents, not chatbots. the platform is an enterprise agent platform. the orchestration layer is an agent framework. Understanding the difference is table stakes.
 
 ---
 
@@ -1216,11 +1216,11 @@ ROAST uses in-context + external (market intel DB). SYNAPSE uses all four (in-co
 
 ---
 
-## 49-51. SoundHound Agentic+
+## 49-51. the platform orchestration framework
 
-### 49. Agentic+ — The 3-Layer Architecture (CORRECTED)
+### 49. orchestration framework — The 3-Layer Architecture (CORRECTED)
 
-Amelia 7's Agentic+ framework is NOT "4 components." It's a three-layer architecture:
+the platform orchestration framework framework is NOT "4 components." It's a three-layer architecture:
 
 ```
 Layer 1: Entities (the nouns)
@@ -1250,17 +1250,17 @@ Agent RESPONDS → "Replacement ordered, tracking XYZ"
 
 **Key differences from traditional chatbots:**
 - Traditional: rigid script ("if user says X, do Y"). Breaks on edge cases.
-- Agentic+: agent figures out the path dynamically based on state. Handles any edge case by composing Cognitive Functions.
+- orchestration framework: agent figures out the path dynamically based on state. Handles any edge case by composing Cognitive Functions.
 
 **Additional features:**
 - Guardrails: enterprise safety, compliance, sensitive data never enters LLM
-- MCP support (Amelia 7.3): standard protocol for connecting external tools
+- MCP support (the platform.3): standard protocol for connecting external tools
 - Agent Console: AI companion assists human reps during live calls
 - Omnichannel: voice, chat, web — all first-class, agent switches mid-conversation
 
-### 50. OASYS (Open Agent System)
+### 50. the orchestration layer (Open Agent System)
 
-Launched May 2026. SoundHound's open framework for building voice-enabled agents. Key features:
+Launched May 2026. the platform open framework for building voice-enabled agents. Key features:
 - Voice-first agent design
 - Built on MCP for tool integration
 - Multi-modal (voice + text + visual)
@@ -1297,4 +1297,4 @@ Client (puts this in LLM context):
 ```
 
 ### Why This Matters
-MCP is the future standard for agent-tool communication. SoundHound's OASYS uses it. Understanding MCP means understanding how agents will connect to the world going forward.
+MCP is the future standard for agent-tool communication. the platform the orchestration layer uses it. Understanding MCP means understanding how agents will connect to the world going forward.

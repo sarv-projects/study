@@ -436,7 +436,7 @@ This maps to how people actually use dual-SIM phones. A single business may have
 **Why prompt templates with variables and not hardcoded text?**
 Variables (business name, hours, services, greeting) mean one prompt template
 works for ALL tenants. Changing a business's hours = update Firestore, not
-redeploy. This is the same pattern as Amelia's Entity system — define the
+redeploy. This is the same pattern as the platform Entity system — define the
 data separately from the conversation logic.
 
 ```python

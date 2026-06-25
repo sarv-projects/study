@@ -7,7 +7,7 @@
 
 ## Interview Quick-Reference: What You'll Actually Be Asked
 
-For a **Cognitive Implementation Engineer (CIE)** role, the interviewer is NOT testing whether you can derive backpropagation. They're testing:
+For a **an implementation engineer (implementation role)** role, the interviewer is NOT testing whether you can derive backpropagation. They're testing:
 1. Do you understand AI concepts well enough to talk to clients about them?
 2. Can you distinguish when a problem needs ML vs rules?
 3. Do you know the basic failure modes of AI systems?
@@ -18,7 +18,7 @@ Below are full detailed explanations for each likely topic — not bullet points
 
 ### Very Likely: AI vs ML vs Deep Learning
 
-**Why they ask**: Clients and non-technical stakeholders use these terms interchangeably. As a CIE, you'll need to communicate clearly about which technology solves which problem.
+**Why they ask**: Clients and non-technical stakeholders use these terms interchangeably. As a implementation role, you'll need to communicate clearly about which technology solves which problem.
 
 **Full explanation**:
 
@@ -44,13 +44,13 @@ def detect_spam(email_text):
 # Used for: LLMs, voice recognition, image classification
 ```
 
-**How to connect it to SoundHound**: "Amelia uses all three. Rule-based systems handle deterministic workflows (BPNs). ML handles intent classification — training on labeled utterances to recognize what a customer wants. Deep Learning powers the Speech-to-Meaning engine that directly converts audio to meaning without going through an intermediate text step."
+**How to connect it to the platform**: "the platform uses all three. Rule-based systems handle deterministic workflows (workflow nodes). ML handles intent classification — training on labeled utterances to recognize what a customer wants. Deep Learning powers the direct audio-to-meaning engine that directly converts audio to meaning without going through an intermediate text step."
 
 ---
 
 ### Very Likely: Supervised vs Unsupervised vs Reinforcement Learning
 
-**Why they ask**: As a CIE, you'll need to recommend the right approach for each client problem. Different business problems need different learning paradigms.
+**Why they ask**: As a implementation role, you'll need to recommend the right approach for each client problem. Different business problems need different learning paradigms.
 
 **Full explanation — Supervised Learning**:
 
@@ -96,7 +96,7 @@ Q[state, action] = Q[state, action] + learning_rate * (
 )
 ```
 
-**How to connect it to SoundHound**: "Amelia's Agentic+ uses supervised learning for intent training — you provide labeled example utterances and the model learns to classify them. The dialogue optimization uses a reinforcement-style approach — successful conversations (resolved customer issues) reinforce the dialogue policy, while escalations or repeats trigger adjustments."
+**How to connect it to the platform**: "the platform orchestration framework uses supervised learning for intent training — you provide labeled example utterances and the model learns to classify them. The dialogue optimization uses a reinforcement-style approach — successful conversations (resolved customer issues) reinforce the dialogue policy, while escalations or repeats trigger adjustments."
 
 ---
 
@@ -145,7 +145,7 @@ Solutions:
 - Better features (feature engineering)
 - Reduce regularization
 
-**How to connect it to SoundHound**: "When a client says 'my model worked in testing but fails in production', that's overfitting. In Amelia, we see this when intent models perform well on training utterances but fail on real customer speech — accents, background noise, phrasing variations. The solution is more diverse training data, data augmentation, and simpler models with regularization."
+**How to connect it to the platform**: "When a client says 'my model worked in testing but fails in production', that's overfitting. In the platform, we see this when intent models perform well on training utterances but fail on real customer speech — accents, background noise, phrasing variations. The solution is more diverse training data, data augmentation, and simpler models with regularization."
 
 ---
 
@@ -175,7 +175,7 @@ test_set = data[8500:]    # Model NEVER sees this until final evaluation
 
 **The golden rule**: The test set must never influence model decisions — not hyperparameter tuning, not feature selection, not early stopping. It's the final exam, not homework practice.
 
-**How to connect it to SoundHound**: "In Amelia, intent models are trained on labeled utterances, validated on a held-out set of utterances to tune confidence thresholds, and finally tested on real anonymized customer interactions to measure true accuracy."
+**How to connect it to the platform**: "In the platform, intent models are trained on labeled utterances, validated on a held-out set of utterances to tune confidence thresholds, and finally tested on real anonymized customer interactions to measure true accuracy."
 
 ---
 
@@ -203,7 +203,7 @@ def gradient_descent(parameters, loss_function, learning_rate=0.01):
 - **Batch size**: How many training examples you compute gradients on at once. Larger = more stable but slower.
 - **Epochs**: How many times you go through the entire dataset.
 
-**How to connect it to SoundHound**: "Every neural network in Amelia — from intent classifiers to Speech-to-Meaning acoustic models — is trained using gradient descent. The specific variant used (Adam, SGD with momentum) depends on the model architecture and training scale."
+**How to connect it to the platform**: "Every neural network in the platform — from intent classifiers to direct audio-to-meaning acoustic models — is trained using gradient descent. The specific variant used (Adam, SGD with momentum) depends on the model architecture and training scale."
 
 ---
 
@@ -248,7 +248,7 @@ def cross_entropy(predicted_probabilities, actual_class):
 
 Why cross-entropy over MSE for classification? MSE punishes all errors equally. Cross-entropy heavily punishes confident wrong predictions — predicting 99% for the wrong class gets a massive loss. This is exactly what you want for classification.
 
-**How to connect it to SoundHound**: "Amelia's intent classifiers use cross-entropy loss — the model outputs probabilities for each intent, and cross-entropy measures how far those probabilities are from the correct intent. For Speech-to-Meaning acoustic models, variants of MSE are used for regression tasks like predicting phoneme boundaries."
+**How to connect it to the platform**: "the platform intent classifiers use cross-entropy loss — the model outputs probabilities for each intent, and cross-entropy measures how far those probabilities are from the correct intent. For direct audio-to-meaning acoustic models, variants of MSE are used for regression tasks like predicting phoneme boundaries."
 
 ---
 
@@ -299,13 +299,13 @@ Total Error = Bias² + Variance + Irreducible Error
 | **Low Variance** | ✅ Good balance | ❌ Overfitting |
 | **High Variance** | ❌ Underfitting | ❌ Double jeopardy |
 
-**How to connect it to SoundHound**: "Amelia's intent models face this tradeoff. A simple model might miss nuanced intents (high bias). A very deep model might overfit to the training utterances (high variance). We tune model complexity using a validation set to find the balance — typically medium-sized transformer encoders that generalize well across client domains."
+**How to connect it to the platform**: "the platform intent models face this tradeoff. A simple model might miss nuanced intents (high bias). A very deep model might overfit to the training utterances (high variance). We tune model complexity using a validation set to find the balance — typically medium-sized transformer encoders that generalize well across client domains."
 
 ---
 
-### Unlikely to Be Asked (Skip for CIE)
+### Unlikely to Be Asked (Skip for implementation role)
 
-Topics like backpropagation math details (chain rule expansion), Q-Learning derivation, batch normalization specifics (gamma/beta parameters), dropout ratio tuning, and individual activation function derivatives are unlikely for a CIE Level I interview. The master overview file (`00_LLM_RAG_Agentic_Master.md`) covers transformer/attention depth in detail.
+Topics like backpropagation math details (chain rule expansion), Q-Learning derivation, batch normalization specifics (gamma/beta parameters), dropout ratio tuning, and individual activation function derivatives are unlikely for a entry-level interview. The master overview file (`00_LLM_RAG_Agentic_Master.md`) covers transformer/attention depth in detail.
 
 ---
 

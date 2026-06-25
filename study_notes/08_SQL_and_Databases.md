@@ -602,7 +602,7 @@ EXPLAIN ANALYZE SELECT * FROM orders WHERE user_id = 123;
 ```
 
 ### Why This Matters
-ROAST uses SQLite indexes on market_intel.db. Missing indexes are the #1 cause of slow queries in production. SoundHound expects engineers to know when to index.
+ROAST uses SQLite indexes on market_intel.db. Missing indexes are the #1 cause of slow queries in production. the platform expects engineers to know when to index.
 
 ---
 
