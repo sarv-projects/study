@@ -454,6 +454,400 @@ User: "What models were released in 2025?"
 
 ---
 
+## LangGraph Pipeline — With Code
+
+### ReasoningState — Data Flow Contract (`reasoning/graph/state.py`)
+
+```python
+class ReasoningState(TypedDict, total=False):
+    # Input
+    query: str                          # User's original question
+    session_id: str                     # UUID for session tracking
+    format: str                         # markdown | pdf | latex_report
+    
+    # Decomposition output (Node 2)
+    sub_questions: list[str]            # Broken-down questions
+    search_queries: list[dict]          # {query, type, priority}
+    retrieval_strategy: str             # "hybrid" | "kg_only" | "web_only"
+    complexity_per_subquestion: dict    # {"low" | "medium" | "high"}
+    merge_strategy: str                 # "comparative" | "sequential" | "summary"
+    
+    # Retrieval output (Node 3)
+    retrieval_context: list[dict]       # [{title, content, source, score}]
+    retrieval_confidence: float         # 0.0 to 1.0
+    web_results: list[dict]            # Web search results
+    web_research_used: bool             # Whether web was consulted
+    
+    # Analysis output (Node 5)
+    extracted_claims: list[dict]        # [{claim, source, confidence, date}]
+    claim_evidence_map: list[dict]      # [{claim, evidence, resolved_conflicts}]
+    contradiction_flags: list[dict]     # [{claim_a, claim_b, verdict, severity}]
+    
+    # Synthesis output (Node 6)
+    synthesis_markdown: str             # LLM-generated answer
+    
+    # Critic output (Node 7)
+    critic_result: dict                 # {grounding, completeness, logic}
+    critic_pass: bool                   # True if all >= 0.8
+    retry_count: int                    # Current retry attempt
+    max_retries: int                    # Max retries (default: 2)
+    
+    # Output (Node 8)
+    final_markdown: str                 # Final answer to user
+    sources: list[dict]                # Deduplicated top 10
+    knowledge_gaps: list[str]           # What wasn't found
+    produced_by: str                    # Pipeline version
+    
+    # Budget tracking
+    budget_snapshot: dict               # Current budget state
+    model_trace: dict                   # {node_name → model_used}
+    total_tokens_used: dict             # Per-model token counts
+    model_used: str                     # Primary model
+    
+    # Status
+    status: str            # PENDING | PROCESSING | COMPLETE | FAILED
+    current_node: str      # Which node is executing
+    error: str             # Error message if FAILED
+```
+
+### Graph Builder — How YAML Becomes a LangGraph (`reasoning/graph/builder.py`)
+
+```python
+from langgraph.graph import StateGraph
+
+class GraphBuilder:
+    """Loads YAML topology → builds LangGraph StateGraph."""
+    
+    def build(self, graph_id="default") -> StateGraph:
+        # Load topology from YAML
+        import yaml
+        path = Path(__file__).parent / "definitions" / f"{graph_id}.yaml"
+        topology = yaml.safe_load(path.read_text())
+        
+        # Create graph with our state type
+        graph = StateGraph(ReasoningState)
+        
+        # Add all nodes from YAML
+        for node in topology["nodes"]:
+            # Lazy-import: only loads the node function when needed
+            node_fn = self._import_node(node["module"], node["function"])
+            graph.add_node(node["name"], node_fn)
+        
+        # Add edges from YAML
+        for edge in topology["edges"]:
+            if "condition" in edge:
+                # Conditional: route based on state
+                graph.add_conditional_edges(
+                    edge["from"],
+                    self._make_branch_router(edge["condition"]),
+                    edge["branches"]
+                )
+            else:
+                # Direct: fixed transition
+                graph.add_edge(edge["from"], edge["to"])
+        
+        # Set entry and finish points
+        graph.set_entry_point(topology["entry"])
+        graph.set_finish_point(topology["finish"])
+        
+        return graph.compile()
+```
+
+### Graph Topology YAML (`reasoning/graph/definitions/default.yaml`)
+
+```yaml
+nodes:
+  - name: entry
+    module: reasoning.nodes.entry
+    function: entry_node
+  - name: decomposition
+    module: reasoning.nodes.decomposition
+    function: decomposition_node
+  - name: retrieval
+    module: reasoning.nodes.retrieval
+    function: retrieval_node
+  - name: web_research
+    module: reasoning.subagents.web_research
+    function: web_research_subagent
+  - name: analysis_crew
+    module: reasoning.nodes.analysis_crew
+    function: analysis_crew_node
+  - name: synthesis
+    module: reasoning.nodes.synthesis
+    function: synthesis_node
+  - name: critic
+    module: reasoning.nodes.critic
+    function: critic_node
+  - name: output
+    module: reasoning.nodes.output
+    function: output_node
+
+edges:
+  - from: entry
+    to: decomposition
+  - from: decomposition
+    to: retrieval
+  - from: decomposition
+    to: web_research
+  - from: retrieval
+    to: analysis_crew
+  - from: web_research
+    to: analysis_crew
+  - from: analysis_crew
+    to: synthesis
+  - from: synthesis
+    to: critic
+  
+  # Conditional: critic determines next step
+  - from: critic
+    condition:
+      field: critic_pass
+      operator: "=="
+      value: true
+    branches:
+      true: output
+      false: analysis_crew  # Retry on failure
+  
+  - from: output
+    to: __end__
+```
+
+**Conditional routing logic**: If `critic_pass == True`, proceed to output. If `False` and `retry_count < max_retries`, go back to analysis_crew with feedback. If `retry_count >= max_retries`, force-proceed to output anyway (prevent infinite loop).
+
+---
+
+## CrewAI Contradiction Detection (`reasoning/nodes/contradiction_detector.py`)
+
+Used in Node 5 (Analysis Crew) to find contradictions between sources. Attempts CrewAI first, falls back to direct LLM call:
+
+```python
+async def run_contradiction_detector_crewai(claims, context):
+    """
+    Phase 3 of analysis. Finds contradictions between claims from different sources.
+    Uses CrewAI if available, falls back to plain Groq call.
+    """
+    try:
+        # Attempt CrewAI path
+        from crewai import Agent, Task, Crew
+        
+        detector = Agent(
+            role="Contradiction Detector",
+            goal="Identify factual contradictions across sources",
+            backstory="You cross-reference claims from multiple sources "
+                      "and flag disagreements with severity ratings.",
+            llm="groq/llama-4-scout-17b-16e-instruct",
+        )
+        
+        task = Task(
+            description=f"""Analyze these extracted claims for contradictions:
+            {json.dumps(claims, indent=2)}
+            
+            Return JSON: {{
+                "contradictions": [
+                    {{
+                        "claim_a": "...",
+                        "claim_b": "...",
+                        "verdict": "AGREE|CONTRADICT|UNCERTAIN",
+                        "conflict_severity": "low|medium|high",
+                        "explanation": "..."
+                    }}
+                ]
+            }}
+            Only flag genuine contradictions, not complementary info.""",
+            agent=detector,
+            expected_output="JSON list of contradictions"
+        )
+        
+        crew = Crew(agents=[detector], tasks=[task])
+        result = crew.kickoff()
+        return json.loads(result)
+        
+    except (ImportError, Exception) as e:
+        # Fallback: Direct Groq call without CrewAI
+        return await _run_plain_node(claims)
+```
+
+**Fallback (`_run_plain_node`)**: Same prompt, but calls Groq directly instead of going through CrewAI's agent framework. This ensures contradiction detection always works even if CrewAI isn't installed.
+
+---
+
+## RAGAS Evaluation (`eval/ragas_monitor.py`)
+
+Attached to every reasoning output. Evaluates answer quality using 5 metrics:
+
+```python
+from ragas import evaluate, EvaluationDataset, SingleTurnSample
+from ragas.metrics import (
+    Faithfulness, AnswerRelevancy, 
+    ContextPrecision, ContextRecall, FactualCorrectness
+)
+
+class RagasMonitor:
+    def __init__(self):
+        self.scores = []  # Keep last 500 scores
+        self._setup_llm()
+    
+    def _setup_llm(self):
+        """RAGAS needs its own LLM and embedding for scoring.
+        Uses Groq llama-3.1-8b as judge + gte-small for embeddings."""
+        from langchain_groq import ChatGroq
+        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+        self._judge_llm = LangchainLLMWrapper(llm)
+        embeddings = HuggingFaceEmbeddings(model_name="thenlper/gte-small")
+        self._embeddings = LangchainEmbeddingsWrapper(embeddings)
+    
+    async def evaluate(self, query, answer, contexts):
+        """Run all 5 RAGAS metrics on a single answer."""
+        sample = SingleTurnSample(
+            user_input=query,
+            response=answer,
+            retrieved_contexts=contexts
+        )
+        dataset = EvaluationDataset([sample])
+        
+        result = evaluate(
+            dataset=dataset,
+            metrics=[
+                Faithfulness(),
+                AnswerRelevancy(),
+                ContextPrecision(),
+                ContextRecall(),
+                FactualCorrectness(),
+            ],
+            llm=self._judge_llm,
+            embeddings=self._embeddings
+        )
+        
+        score = {
+            "faithfulness": result["Faithfulness"],
+            "answer_relevancy": result["AnswerRelevancy"],
+            "context_precision": result["ContextPrecision"],
+            "context_recall": result["ContextRecall"],
+            "factual_correctness": result["FactualCorrectness"],
+        }
+        
+        # Keep rolling window of 500
+        self.scores.append(score)
+        if len(self.scores) > 500:
+            self.scores = self.scores[-250:]
+        
+        return score
+    
+    def get_summary(self):
+        """Average of last N scores — shown on /quality dashboard."""
+        if not self.scores:
+            return {}
+        return {
+            metric: round(sum(s[metric] for s in self.scores) / len(self.scores), 3)
+            for metric in self.scores[0]
+        }
+```
+
+**Metrics explained**:
+| Metric | What It Measures | Production Score |
+|--------|-----------------|-----------------|
+| Faithfulness | Are claims supported by context? | 0.889 |
+| Answer Relevancy | How relevant is the answer? | 0.875 |
+| Context Precision | How much of retrieved data was useful? | 0.892 |
+| Context Recall | Did context contain all needed info? | 0.814 |
+| FactualCorrectness | Are facts correct against ground truth? | (golden set) |
+
+**Graceful degradation**: If RAGAS library isn't installed, evaluation is skipped silently. The pipeline still returns answers.
+
+---
+
+## Semantic Cache (`api/semantic_cache.py`)
+
+Bypasses the entire reasoning pipeline for similar queries:
+
+```python
+class SemanticCache:
+    """
+    pgvector-based cache. If a new query has cosine similarity ≥ 0.95 
+    with a previous query, return the cached result. No LLM call needed.
+    """
+    def __init__(self):
+        # asyncpg connection pool to Neon Postgres
+        self.pool = await asyncpg.create_pool(
+            settings.postgres_url, min_size=1, max_size=5
+        )
+    
+    async def check_cache(self, query: str, threshold=0.95):
+        # Embed the query
+        embedding = await embedding_generator.generate_query_embedding(query)
+        
+        # Search pgvector — cosine distance ≤ (1 - threshold) 
+        row = await self.pool.fetchrow("""
+            SELECT result_payload 
+            FROM synapse_query_cache 
+            WHERE embedding <=> $1 <= $2
+            ORDER BY embedding <=> $1
+            LIMIT 1
+        """, embedding, 1 - threshold)
+        
+        return row["result_payload"] if row else None
+    
+    async def save_to_cache(self, query: str, result_payload: dict):
+        embedding = await embedding_generator.generate_query_embedding(query)
+        await self.pool.execute("""
+            INSERT INTO synapse_query_cache (id, query_text, embedding, result_payload, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+        """, str(uuid4()), query, embedding, json.dumps(result_payload))
+```
+
+**Table**: `synapse_query_cache(id TEXT PK, query_text TEXT, embedding halfvec(384), result_payload JSONB, created_at TIMESTAMP)`
+
+---
+
+## BudgetOracle (`budget/oracle.py`)
+
+Consulted before EVERY LLM call. Prevents budget overspend:
+
+```python
+class BudgetOracle:
+    """Singleton. Tracks per-model remaining RPD/TPM/RPM."""
+    
+    async def can_afford(self, task_type: str, estimated_tokens: int) -> bool:
+        """Walks fallback chain, returns True if ANY model can handle it."""
+        chain = fallback_chains[task_type]
+        for model_name in chain:
+            budget = self.register.get(model_name)
+            if budget and budget.tpm_remaining >= estimated_tokens:
+                return True
+            if model_name == "local":
+                return True  # local is always available
+        return False
+    
+    async def resolve_model(self, task_type: str) -> str:
+        """Returns the cheapest available model for this task."""
+        chain = fallback_chains[task_type]
+        for model_name in chain:
+            budget = self.register.get(model_name)
+            if budget and budget.tpm_remaining > 0:
+                return model_name
+        return "local"  # ultimate fallback
+    
+    async def record_usage(self, model_id: str, tokens: int):
+        """Deduct from budget. Persist to DynamoDB."""
+        if model_id in self.register:
+            self.register[model_id].tpm_remaining -= tokens
+        # Async persist to DynamoDB
+        await dynamodb.save_budget(self.register)
+```
+
+**Fallback chains** (from `budget/fallback_chains.yaml`):
+```yaml
+decomposition: [gpt-oss-20b, qwen3-32b, local]
+synthesis: [llama-3.3-70b, gpt-oss-20b, local]
+critic: [gpt-oss-20b, llama-3.1-8b, local]
+extraction: [llama-3.1-8b, local]
+analysis: [llama-4-scout, llama-3.1-8b, local]
+```
+
+**"local" fallback**: BM25 extractive summarization. Tokenizes context, scores against task, returns top 3 passages. Zero cost, zero API calls, always works.
+
+---
+
 ## Key Architecture Decisions
 
 1. **Neo4j + pgvector dual storage**: Graph DB for relationships (who published what, what implements which technique). Vector DB for similarity search. Different tools for different jobs.

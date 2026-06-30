@@ -13,56 +13,73 @@ A multi-tenant voice AI platform where businesses automate customer phone calls.
 
 ---
 
-## High-Level Architecture
+## High-Level Architecture (Inbound + Outbound)
 
 ```mermaid
 flowchart TB
-    Phone["📞 Customer dials the<br/>business owner's phone number"] --> FORWARD
+    subgraph INBOUND["INBOUND CALL FLOW"]
+        C["📞 Customer dials<br/>business number"] --> FW["Call forwarding (SIM)<br/>→ VAPI number"]
+        FW --> V["☁️ VAPI answers call<br/>Sends webhook"]
+        V --> MW["main.py<br/>Routers + CORS + ngrok"]
+        MW --> VW["vapi_webhook.py<br/>Dispatch by event type"]
+        VW --> ASR["assistant-request"]
+        VW --> TR["transcript"]
+        VW --> EOC["end-of-call-report"]
+        
+        ASR --> CS["call_session.py<br/>5-layer ANI resolution<br/>Build assistant config<br/>Return to VAPI (7.5s)"]
+        CS --> P["prompt_builder.py<br/>3-mode prompt engine"]
+        P --> ST["storage.py<br/>create_call_log + session"]
+        ST --> NT["Fire-and-forget:<br/>slack_service (Slack)<br/>fcm_service (FCM push)"]
+        
+        TR --> CE["call_events.py<br/>handle_transcript()"]
+        CE --> WS["WebSocket broadcast<br/>to mobile app"]
+        CE --> SL["Slack thread update<br/>(throttled 1.5s)"]
+        CE --> FC["FCM notification<br/>(throttled 1.5s)"]
+        
+        EOC --> CE2["call_events.py<br/>handle_end_of_call_report()"]
+        CE2 --> GR["groq_service.py<br/>llama-3.3-70b<br/>Summarize transcript"]
+        CE2 --> OD["Outcome detection<br/>resolved / escalated / needs-followup"]
+        CE2 --> CR["storage.update_call_log()<br/>+ deduct credits"]
+        CE2 --> FCM["FCM: Call ended summary"]
+        CE2 --> SLACK["Slack: Final summary + actions"]
+    end
     
-    FORWARD["📲 Owner has call forwarding<br/>enabled on their SIM (dual-SIM)<br/>Call gets forwarded to VAPI number"] --> VAPI
+    subgraph OUTBOUND["OUTBOUND CALL FLOW"]
+        MO["📱 Mobile app user<br/>triggers callback"] --> TRIG["trigger.py<br/>POST /trigger/outbound"]
+        TRIG --> GR2["groq_service.py<br/>Summarize chat history"]
+        GR2 --> CO["call_orchestrator.py<br/>Build VAPI tools + config"]
+        CO --> VO["☁️ VAPI creates outbound call"]
+        VO --> USR["📞 Call recipient answers<br/>AI conversation begins"]
+        VO --> NT2["Notifications:<br/>FCM + Slack updates"]
+    end
     
-    VAPI["☁️ VAPI — Answers the forwarded call<br/>Sends webhooks to our backend"] --> ENTRY
+    subgraph MOBILE["MOBILE APP (React Native)"]
+        APP["App.js<br/>FCM handler + overlays"]
+        SS["FeedScreen<br/>Call logs + notifications"]
+        LB["LiveInboundScreen<br/>Real-time transcript<br/>Whisper / End / Transfer"]
+        CF["CallForwardingScreen<br/>Dual-SIM MMI codes"]
+        BL["BillingScreen<br/>Plans + credits"]
+        OB["OutboundLiveScreen<br/>Initiate callback"]
+    end
     
-    ENTRY["1. Entry: main.py<br/>Routes requests to the right handler"] --> WEBHOOK
+    subgraph STORAGE["STORAGE"]
+        FS[("Firestore<br/>6 collections<br/>Production")]
+        JS[("JSON files<br/>data/*.json<br/>Dev mode")]
+    end
     
-    WEBHOOK["vapi_webhook.py<br/>Dispatches by event type"] --> INBOUND
-    WEBHOOK --> TRANSCRIPT
-    WEBHOOK --> ENDCALL
-    
-    INBOUND["assistant-request event:<br/>call_session.py handles ANI + config"] --> AI
-    
-    AI["2. AI & Prompts<br/>prompt_builder.py: Build AI personality<br/>(called FIRST, before storage)"] --> STORE
-    
-    STORE["3. Storage<br/>storage.create_call_log() + set_session()"] --> INT
-    
-    INT["4. Integrations (fire-and-forget)<br/>slack_service.py: Send to Slack<br/>fcm_service.py: Push notifications<br/>(run as async background tasks)"] 
-    
-    TRANSCRIPT["transcript event:<br/>call_events.py → handle_transcript()"] --> T_AI
-    T_AI["Groq summarization +<br/>WebSocket broadcast +<br/>Slack + FCM (throttled)"]
-    
-    ENDCALL["end-of-call-report event:<br/>call_events.py → handle_end_of_call()"] --> E_AI
-    E_AI["Groq summarization +<br/>outcome detection +<br/>FCM + Slack cleanup"]
-    
-    INT -->|"Push"| FCM["☁️ Firebase Cloud Messaging"]
-    FCM --> APP["📱 Mobile App"]
-    INT -->|"Update"| SLACK["👤 Owner's Slack"]
-    
-    APP -->|"REST + WebSocket"| WEBHOOK
-    
-    %% Outbound - separate flow
-    OUT["📱 Outbound Call (separate flow)<br/>trigger.py → call_orchestrator.py<br/>(not in inbound path)"]
+    MOBILE -->|"REST API"| MW
+    MOBILE -->|"WebSocket"| WS
+    MOBILE -->|"POST /trigger"| TRIG
+    NT --> STORAGE
+    CR --> STORAGE
+    V --> NT2
 ```
 
-**In plain English (inbound call flow):**
-1. Customer calls business number → VAPI answers and sends an "assistant-request" webhook
-2. `main.py` receives it → `vapi_webhook.py` routes to `call_session.py`
-3. `call_session.py` first calls `prompt_builder.py` to build the AI personality
-4. THEN saves call data to storage (create_call_log + session)
-5. THEN fires Slack + FCM as fire-and-forget background tasks
-6. During the call: transcript events go to `call_events.py` → Groq summarization + WebSocket + Slack + FCM
-7. After call: end-of-call-report → outcome detection + Groq summary + notifications cleanup
+**Inbound flow (left)**: Customer calls → VAPI webhooks → call_session handles ANI + config → prompt_builder builds AI → call_events handles transcript + end-of-call → Slack + FCM + WebSocket
 
-**Note**: `call_orchestrator.py` is OUTBOUND-only (triggered from the mobile app). `gemini_service.py` is only used in the prompt generation endpoint (`/businesses/{uuid}/generate-prompt`), NOT during live calls. The live call flow uses only `groq_service.py` for AI processing.
+**Outbound flow (right)**: Mobile app triggers callback → trigger.py → groq summarizes context → call_orchestrator builds tools → VAPI makes outbound call → AI conversation → notifications
+
+**Storage**: Dual-mode facade — Firestore for production, JSON files for dev, toggled by `USE_FIREBASE` env var
 
 ---
 
@@ -209,6 +226,71 @@ data/phone_map.json
 
 ## Inbound Call Flow — Complete Step-by-Step
 
+### Prerequisite: Call Forwarding via App
+
+Calls don't automatically reach VAPI. The business owner must ENABLE call forwarding first:
+
+```
+1. Owner downloads SuperOwl app, creates account, registers business phone
+2. Owner goes to CallForwardingScreen
+3. App detects SIM carrier (Jio/Airtel/Vi/BSNL via MNC code)
+4. App generates carrier-specific MMI code:
+     Jio:   *21*{VAPI_number}#
+     Airtel: **21*{VAPI_number}#
+     Vi:    *21*{VAPI_number}#
+     BSNL:  *21*{VAPI_number}#
+5. Owner taps "Set Up Forwarding" → app opens phone dialer with MMI code
+6. Owner presses dial → carrier activates unconditional call forwarding
+7. Now ALL calls to owner's number get forwarded to VAPI
+```
+
+**Phone map population**: When owner registers phone number in the app (`POST /mobile/phone`), a phone_map entry is created:
+- Key: `phone_map:{phone_number}` → Value: `{user_id: "...", business_uuid: "..."}`
+- Also stored in: Firestore `user_profiles/{uid}` (nested business object)
+
+This phone_map is used in ANI resolution (Step 2) to quickly identify which business an inbound call belongs to.
+
+### VAPI Webhook Payload Format
+
+When a forwarded call reaches VAPI and it sends the `assistant-request` webhook, the payload looks like:
+
+```json
+{
+  "message": {
+    "type": "assistant-request"
+  },
+  "call": {
+    "id": "vapi_call_abc123",
+    "type": "inbound",
+    "status": "ringing",
+    "from": "+919999999999",        // Caller's number (ANI)
+    "to": "+918888888888",          // Business number VAPI answered (DNIS)
+    "forwardedFrom": "+917777777777", // Original dialed number (the owner's number)
+    "startedAt": "2026-06-23T16:30:00Z",
+    "sipHeaders": {
+      "Diversion": "<sip:+917777777777@sip.vapi.ai>"
+    },
+    "phoneNumber": {
+      "provider": "vapi",
+      "number": "+918888888888"
+    }
+  }
+}
+```
+
+**Key fields extracted**:
+
+| Field | Source | Used For |
+|-------|--------|----------|
+| `call.id` | VAPI generated | Session key, call_log reference |
+| `call.from` | SIP From header | Caller identification (NOT for ANI resolution) |
+| `call.to` | SIP Request-URI | Direct dial numbers |
+| `call.forwardedFrom` | Call forwarding header | **The actual business number** |
+| `call.sipHeaders.Diversion` | SIP Diversion header | **Primary ANI resolution source** |
+| `call.phoneNumber.number` | VAPI assigned | VAPI's number that was called |
+
+**Critical insight**: The `from` field is the CALLER's number (customer), NOT the business number. The `to` field is the VAPI number that was called. The original business number is in `forwardedFrom` or the `Diversion` SIP header — that's what ANI resolution uses to look up the business.
+
 ### Design Reasoning
 
 **Why VAPI and not Twilio/AWS Connect?**
@@ -259,19 +341,41 @@ This is the CRITICAL path. Understand every step.
 
 ```mermaid
 sequenceDiagram
+    participant O as Business Owner
+    participant A as SuperOwl App
     participant C as Customer
+    participant CR as Carrier
     participant V as VAPI
     participant WH as vapi_webhook.py
     participant CS as call_session.py
     participant PB as prompt_builder.py
     participant ST as storage.py
     
-    C->>V: Dial business number
+    Note over O,A: PREREQUISITE: Call forwarding setup
+    O->>A: Open CallForwardingScreen
+    A->>A: Detect SIM carrier (MNC code)
+    A->>A: Generate MMI code: *21*{VAPI_NUM}#
+    A->>O: Show MMI code + "Tap to dial"
+    O->>O: Dial MMI code on phone
+    CR->>CR: Call forwarding activated
+    O->>A: Phone number registered → phone_map populated
+    Note over O,A: Now ALL calls to owner → VAPI
+    
+    Note over C,ST: PHASE 1: LIVE CALL
+    
+    C->>CR: Dial owner's business number
+    CR->>V: Call forwarded to VAPI number
     V->>WH: POST /vapi-webhook (assistant-request)
     Note over WH,ST: Must respond within 7.5 seconds
     
+    WH->>WH: Extract: call.id, call.from (caller), call.forwardedFrom (business)
+    
     WH->>CS: handle_assistant_request(payload)
-    CS->>CS: Step 1: Parse ANI (5-layer resolution)
+    CS->>CS: Step 1: Parse ANI (3-layer resolution)
+    Note over CS: Layer 1: Diversion SIP → phone_map
+    Note over CS: Layer 2: SIP headers → phone_map
+    Note over CS: Layer 3: DB lookup by Diversion ANI
+    
     CS->>ST: Step 2: Load business config by phone
     ST-->>CS: Business profile + settings
     
@@ -280,7 +384,7 @@ sequenceDiagram
     PB->>PB: Render template with variables
     PB-->>CS: System prompt + welcome message
     
-    CS->>CS: Step 4: Configure features
+    CS->>CS: Step 4: Configure features (recording, transfer, whisper)
     CS->>CS: Step 5: Build VAPI assistant overrides
     
     CS-->>WH: Return assistantId + overrides
@@ -379,43 +483,62 @@ async def vapi_webhook(request: Request):
 
 ### Step 2: ANI Resolution (`call_session.py`)
 
+**What we need to find**: The BUSINESS that this call is for. We have the caller's number (from `call.from`) and the VAPI number (from `call.to`), but we need to map this to a business profile.
+
+**Key insight**: The `call.from` field is the CUSTOMER's phone number (the person calling), NOT the business number. The business number is usually in the `Diversion` SIP header (the number the call was forwarded FROM). To find the business, we check the `to` field (VAPI number) against a phone map and DB.
+
 ```python
-# call_session.py — 5-layer ANI resolution
-async def handle_assistant_request(payload):
-    call = payload["call"]
-    caller_phone = None
-    
-    # Layer 1: Diversion SIP Header
-    # Some carriers add "Diversion" header with original caller
-    # Format: sip:9999999999@sip.vapi.ai
-    diversion = call.get("sipHeaders", {}).get("Diversion")
-    if diversion:
-        caller_phone = parse_sip_uri(diversion)  # Extract "9999999999"
-    
-    # Layer 2: SIP From/To Headers
-    if not caller_phone:
-        caller_phone = call.get("from")  # VAPI's normalized caller number
-    
-    # Layer 3: Phone Map (in-memory cache)
-    # Pre-populated when businesses register their phone numbers
-    # Key: phone_number → Value: business_uuid
-    if not caller_phone:
-        business_uuid = phone_map.get(call.get("to"))
-    
-    # Layer 4: DB Lookup by Business Phone
-    if not business_uuid:
-        business_uuid = await storage.get_business_by_phone(call.get("to"))
-    
-    # Layer 5: DB Lookup by Owner Phone
-    if not business_uuid:
-        business_uuid = await storage.get_business_by_owner_phone(caller_phone)
-    
-    # Now load full business config
-    profile = await storage.get_user_profile(business_uuid)
-    business = profile["business"]
-    
-    # ... continue to build assistant config
+# call_session.py — 3-layer ANI resolution
+# Extract key fields from VAPI payload
+call = payload["call"]
+customer_phone = call.get("from", "")           # The CALLER's number (for transcripts)
+vapi_number = call.get("to", "")                # The VAPI number that was called
+diversion = call.get("sipHeaders", {}).get("Diversion", "")  # The FORWARDED FROM number (business)
+forwarded_from = call.get("forwardedFrom", "")  # Alternative source for business number
+
+# Determine which number to look up in phone_map
+# Priority: Diversion > forwardFrom > vapi_number (to)
+lookup_number = parse_sip_uri(diversion) or forwarded_from or vapi_number
+
+# 3-Layer ANI Resolution:
+# Layer 1: In-memory phone_map cache (O(1), ~1ms)
+#         phone_map is populated when businesses register their numbers
+#         Key: normalized phone → Value: user_id
+business_uuid = phone_map.get(normalize_phone(lookup_number))
+
+# Layer 2: Firestore DB lookup (if cache miss, ~100-300ms)
+if not business_uuid:
+    # Internal logic: tries exact match, +91 prefix, without prefix, 
+    # raw 10-digit, then full scan
+    business_uuid = await storage.get_business_by_phone(lookup_number)
+
+# Layer 3: DB lookup by owner's personal number (last resort)
+if not business_uuid:
+    business_uuid = await storage.get_business_by_owner_phone(lookup_number)
+
+# Now load full business config
+profile = await storage.get_user_profile(business_uuid)
+business = profile["business"]  # Nested business object
 ```
+
+**Data passed forward to next steps**:
+
+| Variable | Source | Used By | Purpose |
+|----------|--------|---------|---------|
+| `call.id` | VAPI payload | Session key, call_log | Unique identifier for this call |
+| `customer_phone` | `call.from` | Transcript, call_log, FCM/Slack | Display caller info |
+| `vapi_number` | `call.to` | ANI resolution | Fallback lookup |
+| `lookup_number` | Diversion/forwardedFrom | ANI resolution | Business identification |
+| `business_uuid` | phone_map/DB | All downstream | Tenant isolation |
+| `profile` | Firestore | prompt_builder, features | Business config + user preferences |
+| `business` | `profile["business"]` | prompt_builder, features, Slack | Nested business settings |
+
+**phone_map population**: Created when owner registers phone in app (`POST /mobile/phone`):
+```python
+# On phone registration:
+phone_map[normalize_phone(new_phone)] = user_id
+```
+Also, on startup, phone_map is pre-loaded from Firestore for O(1) lookups during calls.
 
 ### Step 3: Build Assistant Config (`prompt_builder.py`)
 
@@ -1769,6 +1892,183 @@ async def generate_business_prompt(knowledge_base_text):
 
     response = await gemini_client.generate_content(prompt)
     return response.text
+```
+
+---
+
+## Prompt Templates — Actual Content
+
+### PERSONAL_PROMPT Template
+
+```
+You are {owner_name}'s personal AI assistant. Your job is to handle calls 
+professionally and politely.
+
+Guidelines:
+1. Identify yourself as {owner_name}'s assistant
+2. If the caller asks for {owner_name}, take a message or note the purpose
+3. If the call seems like spam or telemarketing: {spam_rules}
+4. If urgent: offer to forward or take a detailed message
+5. Greeting: {greeting}
+6. Be concise. Don't over-explain.
+7. NEVER pretend to be {owner_name}. Always identify as the assistant.
+```
+
+### BUSINESS_PROMPT Template
+
+```
+You are a voice AI assistant for {business_name}. Your job is to help 
+customers with their inquiries professionally.
+
+Business Information:
+- Hours: {hours}
+- Services: {services}
+- FAQs: {faq}
+- Booking: {booking_link}
+
+Guidelines:
+1. Greet callers warmly with the business name
+2. Answer questions about services, hours, and availability
+3. If they want to book: guide them through the booking process
+4. If you can't answer: offer to take a message or transfer
+5. Be friendly but professional. Represent the business well.
+6. NEVER make up information. If unsure, say "Let me check that for you."
+```
+
+### HYBRID_PROMPT Template
+
+```
+You are a versatile AI assistant. The caller has reached a number that serves 
+both a business ({business_name}) and a personal contact ({owner_name}).
+
+Your FIRST task is to determine the caller's intent:
+
+1. If caller asks about {business_name} or its services → use BUSINESS mode
+2. If caller asks for {owner_name} personally → use PERSONAL mode
+3. If unclear → ask: "Is this regarding {business_name} or are you 
+   looking for {owner_name}?"
+
+After detecting intent, follow the appropriate mode's guidelines.
+NEVER switch modes mid-conversation unless the caller explicitly indicates 
+a change.
+```
+
+---
+
+## Onboarding Flow (8 Steps)
+
+The mobile app has an 8-step onboarding wizard for new users:
+
+```
+Step 1: WELCOME
+  → "Welcome to SuperOwl! Let's set up your AI assistant."
+  → Shows: brief feature intro (AI answering, call forwarding, Slack)
+  → Button: "Get Started"
+
+Step 2: NAME
+  → "What should I call you?"
+  → TextInput: assistant name (default: "Hari")
+  → Used in: greeting message, AI personality
+
+Step 3: PHONE
+  → "What's your phone number?"
+  → TextInput: phone number with +91 prefix
+  → Used in: ANI resolution, call forwarding setup
+
+Step 4: VOICE
+  → "Choose my voice"
+  → Options: Priya (female, Hindi+English) / Arjun (male, Hindi+English)
+  → Note: Stored but never applied to VAPI (known bug)
+
+Step 5: INBOUND
+  → "Forward calls to SuperOwl"
+  → Shows: call forwarding instruction + MMI code
+  → Button: "Open Phone Dialer" (triggers tel: link with MMI code)
+
+Step 6: MODE
+  → "How will you use SuperOwl?"
+  → Options: Personal / Business / Business+Personal
+  → Sets: business_prompt_mode
+
+Step 7: NOTIFICATIONS
+  → "Get notified on calls"
+  → Asks: FCM permission request
+  → Enables: push notifications for incoming calls
+
+Step 8: DONE
+  → "You're all set!"
+  → Shows: summary of settings
+  → Button: "Go to Dashboard"
+```
+
+---
+
+## Error Handling and Recovery
+
+### VAPI Webhook Timeout (7.5s)
+
+```
+What happens: VAPI sends assistant-request, expects response in 7.5s
+If response comes after 7.5s: VAPI retries 3 times, then fails the call
+Backend handles this by:
+  - Prioritizing critical path (ANI + config) before non-critical (Slack + FCM)
+  - Running Slack/FCM as asyncio.create_task (fire-and-forget)
+  - If ANI resolution takes too long (5 layers all fail): return default config
+```
+
+### ANI Resolution Failure
+
+```
+What happens: None of the 5 layers can identify the business
+Fallback: Return a default assistant config with generic greeting
+Effect: Call connects but AI doesn't know which business it's for
+Note: This means the system degrades gracefully rather than dropping the call
+```
+
+### Groq API Failure (Summarization)
+
+```
+What happens: groq_service.py fails (rate limit or outage)
+Fallback: call_events.py catches the exception and skips summarization
+Effect: Call log is saved without AI summary. User still gets FCM/Slack 
+         notifications with basic call info (duration, outcome)
+```
+
+### Firestore Write Failure
+
+```
+What happens: storage.py write fails
+Fallback: Error is logged but call continues
+Effect: Call is handled end-to-end, but not recorded for analytics
+Critical: This is acceptable because the primary goal is handling the call,
+          not logging it. Fail open, not fail closed.
+```
+
+### Slack API Failure
+
+```
+What happens: slack_service.py fails
+Fallback: send_*_notification catches the exception silently
+Effect: Owner doesn't get Slack notification for this call
+         FCM notification to mobile still works (independent path)
+```
+
+### Owner PA Call Failure
+
+```
+What happens: Owner doesn't pick up the PA call
+Fallback: After timeout, inject "I'm sorry, our team is currently unavailable"
+Effect: Customer hears polite decline, can leave a message
+Note: escalation_mode = 'both' tries Slack first, then falls back to PA call
+```
+
+### JSON Storage Failure (Dev Mode)
+
+```
+What happens: json_storage.py gets a corrupt file or permission error
+Fallback: raise the exception to the caller
+Effect: The endpoint returns 500. Restart or revert to clean data.
+Note: This is dev-only. Production uses Firestore.
 ```
 
 ---
