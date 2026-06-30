@@ -311,14 +311,14 @@ flowchart TB
 ### Normal LLM vs RAG System — Side by Side
 ```mermaid
 flowchart LR
-    subgraph Normal["Without RAG (Traditional LLM)"]
+    subgraph Normal_BOX["Without RAG (Traditional LLM)"]
         direction TB
         N1["Prompt: Why are Vancouver<br/>hotels expensive this weekend?"] --> N2["LLM relies ONLY on<br/>training data"]
         N2 --> N3["LLM guesses — likely wrong<br/>No knowledge of Taylor Swift concert<br/>No knowledge of recent events"]
         N3 --> N4["❌ Generic or incorrect answer<br/>'Hotel prices vary due to demand...'"]
     end
     
-    subgraph RAG["With RAG"]
+    subgraph RAG_BOX["With RAG"]
         direction TB
         R1["Same Prompt"] --> R2["Retriever searches<br/>Knowledge Base"]
         R2 --> R3["Finds articles: 'Taylor Swift<br/>Vancouver residency this weekend'"]
@@ -341,7 +341,7 @@ flowchart TB
     
     FINAL["📋 Augmented Prompt<br/><br/>'Respond to the following prompt:<br/>Why are hotels in Vancouver super<br/>expensive this weekend?<br/><br/>Using the following information to<br/>help you answer:<br/><br/>[Article 1: Taylor Swift concert]<br/>[Article 2: Hotel price surge]<br/>[Article 3: Tourism record]'"]
     
-    subgraph Structure["Prompt Structure"]
+    subgraph Structure_BOX["Prompt Structure"]
         S1["1. Instruction: 'Respond to the following prompt'"]
         S2["2. Original question"]
         S3["3. Retrieved information injected as context"]
@@ -356,7 +356,7 @@ flowchart TB
 ### Component Responsibilities — Who Does What
 ```mermaid
 flowchart TB
-    subgraph Components["RAG System Components"]
+    subgraph Components_BOX["RAG System Components"]
         direction TB
         RETR["🔍 RETRIEVER<br/><br/>Responsibilities:<br/>• Maintains knowledge base<br/>• Searches for relevant docs<br/>• Ranks documents by relevance<br/>• Returns only the most useful ones<br/><br/>NOT responsible for:<br/>• Understanding the question deeply<br/>• Generating any text<br/>• Reasoning about the answer<br/><br/>STRENGTH: Fast search over large datasets"]
         
@@ -424,7 +424,7 @@ sequenceDiagram
 ### How Knowledge Bases Work
 ```mermaid
 flowchart TB
-    subgraph Types["Types of Knowledge Bases"]
+    subgraph Types_BOX["Types of Knowledge Bases"]
         direction TB
         PUBLIC["🌐 Public Knowledge<br/>Entire internet, Wikipedia,<br/>news articles, public repos<br/>Example: Web search AI summaries"]
         PRIVATE["🔒 Private Enterprise<br/>Company policies, internal docs,<br/>product catalogs, CRM data<br/>Example: Customer service chatbot"]
@@ -432,7 +432,7 @@ flowchart TB
         SPECIALIZED["📘 Specialized Domain<br/>Medical journals, legal case files,<br/>research papers, patents<br/>Example: Healthcare Q&A system"]
     end
     
-    subgraph Scale["Scale Spectrum"]
+    subgraph Scale_BOX["Scale Spectrum"]
         S1["Small ←——————————→ Massive<br/>Your text messages      Entire internet"]
     end
     
@@ -450,11 +450,11 @@ flowchart TB
 ### Advantage 1: Makes Unavailable Information Available
 ```mermaid
 flowchart LR
-    subgraph Problem["Problem: LLM Knowledge Gap"]
+    subgraph Problem_BOX["Problem: LLM Knowledge Gap"]
         P1["LLM trained on<br/>public internet data"] --> P2["Doesn't know:<br/>• Private company data<br/>• Personal information<br/>• Today's news<br/>• Niche domains"]
     end
     
-    subgraph Solution["Solution: RAG Bridges the Gap"]
+    subgraph Solution_BOX["Solution: RAG Bridges the Gap"]
         S1["RAG System"] --> S2["Retriever fetches<br/>from knowledge base"]
         S2 --> S3["Augmented prompt<br/>contains the missing info"]
         S3 --> S4["LLM now has access<br/>to previously<br/>unavailable data"]
@@ -501,11 +501,11 @@ flowchart TB
 ### Advantage 5: Component Separation
 ```mermaid
 flowchart TB
-    subgraph Without["LLM Alone"]
+    subgraph Without_BOX["LLM Alone"]
         W1["LLM must do EVERYTHING:<br/>1. Remember all facts<br/>2. Search its memory<br/>3. Filter relevant info<br/>4. Generate response<br/>5. Hope it's right"]
     end
     
-    subgraph With["With RAG"]
+    subgraph With_BOX["With RAG"]
         R1["🔍 Retriever does:<br/>• Search<br/>• Filter<br/>• Rank<br/>• Present succinctly"]
         R2["🧠 LLM does:<br/>• Understand context<br/>• Reason over facts<br/>• Generate text"]
     end
@@ -607,11 +607,11 @@ Why RAG is CRITICAL in these domains:
 
 ```mermaid
 flowchart LR
-    subgraph Input["Prompt (Incomplete Text)"]
+    subgraph Input_BOX["Prompt (Incomplete Text)"]
         I["What a beautiful day!<br/>The sun is ____"]
     end
     
-    subgraph Output["Completion (LLM fills in)"]
+    subgraph Output_BOX["Completion (LLM fills in)"]
         O1["The sun is shining"]
         O2["The sun is rising"]
         O3["The sun is out"]
@@ -634,15 +634,15 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph Words["Sentence"]
+    subgraph Words_BOX["Sentence"]
         W["The sun is shining brightly"]
     end
     
-    subgraph Tokens["Tokenized (BPE)"]
+    subgraph Tokens_BOX["Tokenized (BPE)"]
         T["The | sun | is | shining | bright | ly"]
     end
     
-    subgraph IDs["Token IDs"]
+    subgraph IDs_BOX["Token IDs"]
         ID["791 | 4521 | 318 | 17892 | 4567 | 289"]
     end
     
@@ -703,21 +703,21 @@ token_probabilities = {
 
 ```mermaid
 flowchart LR
-    subgraph Path1["Path A (80% likely)"]
+    subgraph Path1_BOX["Path A (80% likely)"]
         A1["The sun is"] --> A2["shining"]
         A2 --> A3["in"]
         A3 --> A4["the"]
         A4 --> A5["sky"]
     end
     
-    subgraph Path2["Path B (12% likely)"]
+    subgraph Path2_BOX["Path B (12% likely)"]
         B1["The sun is"] --> B2["rising"]
         B2 --> B3["over"]
         B3 --> B4["the"]
         B4 --> B5["horizon"]
     end
     
-    subgraph Path3["Path C (2% likely)"]
+    subgraph Path3_BOX["Path C (2% likely)"]
         C1["The sun is"] --> C2["warming"]
         C2 --> C3["our"]
         C3 --> C4["faces"]
@@ -736,24 +736,24 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph Data["Training Data"]
+    subgraph Data_BOX["Training Data"]
         D1["Trillions of tokens<br/>from the open internet"]
         D2["Books, articles, code,<br/>social media, forums"]
     end
     
-    subgraph Model["Before Training"]
+    subgraph Model_BOX["Before Training"]
         M1["Random parameters<br/>(billions of numbers)"]
         M2["Output: pure gibberish"]
     end
     
-    subgraph Training["Training Process"]
+    subgraph Training_BOX["Training Process"]
         T1["Show incomplete text<br/>from training data"]
         T2["LLM predicts next token"]
         T3["Compare prediction to<br/>ACTUAL next token"]
         T4["Update internal parameters<br/>to make better predictions"]
     end
     
-    subgraph Result["After Training"]
+    subgraph Result_BOX["After Training"]
         R1["Learned parameters<br/>(billions of numbers)"]
         R2["Output: coherent text<br/>in a variety of styles"]
     end
@@ -799,15 +799,15 @@ def training_step(training_text):
 
 ```mermaid
 flowchart LR
-    subgraph Truth["What Users Expect"]
+    subgraph Truth_BOX["What Users Expect"]
         T["LLM = Truth Machine<br/>Should give correct answers"]
     end
     
-    subgraph Reality["What LLMs Actually Do"]
+    subgraph Reality_BOX["What LLMs Actually Do"]
         R["LLM = Probability Machine<br/>Generates PROBABLE text,<br/>not NECESSARILY TRUE text"]
     end
     
-    subgraph Gap["The Gap"]
+    subgraph Gap_BOX["The Gap"]
         G["When training data covers<br/>a topic well → probable = true<br/><br/>When topic is RARE in training →<br/>probable ≠ true → HALLUCINATION"]
     end
     
@@ -828,15 +828,15 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph Short["Short Context (Old Models)"]
+    subgraph Short_BOX["Short Context (Old Models)"]
         S1["Context: 2,048 tokens<br/>~1,500 words<br/><br/>Prompt + Retrieved docs must<br/>fit in this tiny space.<br/>You can only include a few<br/>paragraphs of retrieved info."]
     end
     
-    subgraph Medium["Medium Context (Current)"]
+    subgraph Medium_BOX["Medium Context (Current)"]
         M1["Context: 32K-128K tokens<br/>~24K-96K words<br/><br/>Can fit entire codebase<br/>files or long documents.<br/>But cost increases with<br/>prompt length."]
     end
     
-    subgraph Long["Long Context (New Models)"]
+    subgraph Long_BOX["Long Context (New Models)"]
         L1["Context: 200K-1M+ tokens<br/>~150K-750K words<br/><br/>Can fit entire books.<br/>Less need for aggressive<br/>chunking. More flexibility.<br/>Still computationally expensive."]
     end
     
@@ -868,3 +868,201 @@ flowchart TB
 ### Module 1 Key Takeaway on LLMs
 
 > An LLM is a probability machine, not a truth machine. It generates text that **sounds right** based on its training data. RAG bridges the gap between "sounds right" and "IS right" by providing relevant documents in the prompt. The retriever's job is to find those documents efficiently within the context window limits.
+
+---
+
+## How Retrievers Work — Deep Dive
+
+### The Library Analogy
+
+```mermaid
+flowchart TB
+    subgraph Library_BOX["🏛️ A Library"]
+        L_COLLECTION["📚 Collection of Books<br/>Organized by topic, genre, author"]
+        L_INDEX["📇 Card Catalog (Index)<br/>Maps topics → shelf locations"]
+        L_LIBRARIAN["👩‍💼 Librarian<br/>Understands your question<br/>Knows where to look"]
+    end
+    
+    subgraph Retriever_BOX["🔍 A Retriever"]
+        R_KB["📄 Knowledge Base<br/>Collection of documents"]
+        R_INDEX["⚡ Index<br/>Organizes documents for fast search"]
+        R_RET["⚙️ Retriever Logic<br/>Processes prompt meaning<br/>Searches index by relevance"]
+    end
+    
+    Library -->|"Maps directly to"| Retriever
+    
+    Q1["You ask: How to make<br/>NY-style pizza at home?"] --> L_LIBRARIAN
+    L_LIBRARIAN -->|"Looks in: Cooking,<br/>Italian Cuisine, New York"| L_COLLECTION
+    
+    Q2["User prompt arrives"] --> R_RET
+    R_RET -->|"Searches index for:<br/>matching concepts"| R_INDEX
+    R_INDEX --> R_KB
+    R_KB -->|"Returns best matches"| R_RET
+    
+    style L_COLLECTION fill:#f3e5f5,stroke:#7b1fa2
+    style L_INDEX fill:#e8eaf6,stroke:#283593
+    style L_LIBRARIAN fill:#fff3e0,stroke:#e65100
+    style R_KB fill:#f3e5f5,stroke:#7b1fa2
+    style R_INDEX fill:#e8eaf6,stroke:#283593
+    style R_RET fill:#fff3e0,stroke:#e65100
+```
+
+### What a Retriever Does — Step by Step
+
+```mermaid
+sequenceDiagram
+    participant USER as User
+    participant RAG as RAG System
+    participant RET as Retriever
+    participant INDEX as Index
+    participant KB as Knowledge Base
+    
+    USER->>RAG: Submit prompt
+    RAG->>RET: Route to retriever
+    
+    Note over RET: Step 1: Process the prompt
+    RET->>RET: Analyze meaning of the question<br/>Identify key concepts and intent
+    
+    Note over RET: Step 2: Search the index
+    RET->>INDEX: Query with processed understanding
+    INDEX-->>RET: Find candidate documents
+    
+    Note over RET: Step 3: Score by relevance
+    RET->>RET: Calculate similarity score<br/>for each candidate document<br/>Score = numerical measure of<br/>how relevant the doc is to the prompt
+    
+    Note over RET: Step 4: Rank and filter
+    RET->>RET: Sort by score descending<br/>Decide how many to return<br/>(top-k strategy)
+    
+    RET->>KB: Fetch top-k documents
+    KB-->>RET: Return full document text
+    
+    RET-->>RAG: Return ranked relevant documents
+    RAG-->>USER: Generate grounded response
+```
+
+### The Retrieval Challenge — Precision vs Recall
+
+```mermaid
+flowchart TB
+    subgraph TooMany_BOX["❌ Too Many Docs Retrieved"]
+        TM1["Retriever returns ALL documents<br>that might be relevant"]
+        TM2["Problem:<br/>• Expensive prompts (more tokens)<br/>• May exceed context window<br/>• Relevant info DROWNED in noise"]
+        TM1 --> TM2
+    end
+    
+    subgraph TooFew_BOX["❌ Too Few Docs Retrieved"]
+        TF1["Retriever returns only the<br/>top 1 document"]
+        TF2["Problem:<br/>• May miss relevant info in rank #2, #3, #4<br/>• LLM has incomplete context<br/>• Answer may be wrong"]
+        TF1 --> TF2
+    end
+    
+    subgraph JustRight_BOX["✅ Optimal Retrieval"]
+        JR1["Retriever returns top-k documents<br/>where k is carefully tuned"]
+        JR2["Result:<br/>• All relevant info included<br/>• Minimal noise<br/>• Fits in context window<br/>• Cost-efficient"]
+        JR1 --> JR2
+    end
+    
+    TooMany -.->|"Find the balance"| JustRight
+    TooFew -.->|"Find the balance"| JustRight
+```
+
+| Term | Definition | Library Analogy |
+|------|-----------|-----------------|
+| **Knowledge Base** | Collection of all documents the retriever can search | The library's entire book collection |
+| **Index** | Data structure that organizes documents for fast search | The card catalog telling you which shelf a book is on |
+| **Query Processing** | Understanding the prompt's meaning and intent | The librarian interpreting your question |
+| **Relevance Score** | Numerical measure of how relevant a document is to the prompt | How closely a book matches what you're looking for |
+| **Top-k** | The k highest-scoring documents returned | The librarian handing you the 3 best books |
+
+### Vector Databases — The Production-Scale Retriever
+
+```mermaid
+flowchart TB
+    subgraph Options_BOX["Retriever Implementation Options"]
+        OPT1["🗄️ Traditional Database<br/>(SQL/NoSQL)<br/><br/>Most companies already<br/>have data here<br/>Works but NOT optimized<br/>for similarity search"]
+        OPT2["🔢 Vector Database<br/>(Pinecone, Chroma, Weaviate)<br/><br/>OPTIMIZED for finding<br/>similar documents<br/>Built for RAG at scale"]
+    end
+    
+    OPT1 -->|"Good for small scale"| RESULT
+    OPT2 -->|"Essential for production"| RESULT
+    
+    RESULT["RAG System with relevant<br/>documents fetched quickly"]
+    
+    note["Key Insight: Vector databases are specialized tools.<br/>Like using a dedicated search engine vs grep on a filesystem.<br/>Both can find things, but one is MUCH faster at scale."]
+```
+
+| Approach | Pros | Cons | Best For |
+|----------|------|------|----------|
+| **Traditional DB** | Already has your data, no migration needed | Slow for similarity search, not designed for text matching | Small-scale, prototyping |
+| **Vector Database** | Purpose-built for similarity search, fast at scale | Requires embedding pipeline, extra infrastructure | Production RAG systems |
+
+### Scoring Relevance — How It Works
+
+```python
+# Simplified: How a retriever scores documents
+query = "How to make New York style pizza at home?"
+
+documents = [
+    "The history of pizza in Naples, Italy dates back to the 18th century...",
+    "New York style pizza is characterized by its large, thin slices...",
+    "The best pizza dough requires a high-gluten flour and proper fermentation...",
+    "The Brooklyn Bridge was opened in 1883 and connects Manhattan...",
+]
+
+scores = []
+for doc in documents:
+    score = calculate_similarity(query, doc)  # Numerical measure
+    scores.append((doc, score))
+
+# Sorted by score descending:
+# 1. "New York style pizza..." → score: 0.92  ← Most relevant
+# 2. "The best pizza dough..." → score: 0.74  
+# 3. "The history of pizza..." → score: 0.51
+# 4. "The Brooklyn Bridge..."  → score: 0.03  ← Correctly low score!
+
+# Return top-k (e.g., k=2):
+return documents[0:2]  # Best 2 docs
+```
+
+**Key challenge**: The retriever must rank ALL documents and return only the most relevant. It needs to:
+- Push relevant docs to the top (high score)
+- Keep irrelevant docs at the bottom (low score)
+- Choose the right cutoff point (how many to return)
+
+### Retrieval vs Other Search Technologies
+
+```mermaid
+flowchart TB
+    subgraph All_BOX["Information Retrieval (Broad Field)"]
+        WEB["🌐 Web Search<br/>Google, Bing, DuckDuckGo<br/>Retrieves web pages<br/>matching a search query"]
+        DB["🗄️ Database Query<br/>SQL: SELECT * FROM table<br/>WHERE condition<br/>Retrieves exact matches"]
+        RAG_RET["🔍 RAG Retriever<br/>Retrieves documents<br/>most SIMILAR to prompt<br/>(not exact match)"]
+    end
+    
+    note["All three are forms of information retrieval.<br/>The RAG retriever was INSPIRED by decades of research<br/>in web search and database systems."]
+```
+
+### What Makes a Good Retriever?
+
+| Quality | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Relevance** | Returns docs actually related to the prompt | LLM needs accurate context to generate good answers |
+| **Precision** | Doesn't return irrelevant docs | Irrelevant docs waste context window and increase cost |
+| **Recall** | Doesn't miss relevant docs | Missing relevant docs leads to incomplete answers |
+| **Speed** | Returns results quickly | Users don't wait long for responses |
+| **Scalability** | Works with millions of documents | Real-world knowledge bases can be massive |
+
+### Summary — Retriever's Role in RAG
+
+```mermaid
+flowchart TB
+    PROMPT["User Prompt"] --> RETRIEVER["🔍 RETRIEVER<br/><br/>1. Process prompt meaning<br/>2. Search knowledge base index<br/>3. Score documents by relevance<br/>4. Return top-k results"]
+    RETRIEVER --> AUGMENT["AUGMENTATION<br/>Combine prompt + retrieved docs"]
+    AUGMENT --> LLM_PROC["🧠 LLM<br/>Generate grounded answer"]
+    
+    RETRIEVER -.-> KB["📚 Knowledge Base<br/>(all available documents)"]
+    
+    style RETRIEVER fill:#fff3e0,stroke:#e65100,stroke-width:3px
+```
+
+> **The retriever's job**: Find the needle (relevant info) in the haystack (knowledge base) without bringing the whole haystack with it. Retrieve too little → LLM lacks context. Retrieve too much → wasted cost and context window overflow. The art of RAG is finding the balance.

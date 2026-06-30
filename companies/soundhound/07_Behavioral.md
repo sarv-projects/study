@@ -200,17 +200,17 @@ def has_unique(s):
 
 > "I've just completed my B.E. in Electronics & Communication Engineering at Ramaiah Institute of Technology. I've been building AI and backend systems for the past year — shipping production code, deploying to real users.
 >
-> I built four systems that connect to this role.
+> I built four systems.
 >
-> First, **SuperOwl** — my internship project. I independently built a multi-tenant voice AI platform where businesses automate customer calls. The system uses VAPI for telephony, has per-tenant AI behavior, dynamic prompts, and escalation logic. It connects to Slack, Firebase, FCM — multiple external integrations. That's the same pattern as implementing Amelia for different enterprise clients.
+> First, **SuperOwl** — my internship project at Beaut Group. I independently built a multi-tenant voice AI platform where businesses automate customer calls. The system uses VAPI for telephony, has per-tenant AI behavior, dynamic prompts, and escalation logic. It connects to Slack, Firebase, FCM — multiple external integrations. End-to-end ownership from architecture to deployment.
 >
-> Second, **ROAST** — a resume analysis platform with 6 AI agents running in parallel with fallback chains and circuit breakers across 5 LLM providers. It's used by 100+ real users.
+> Second, **ROAST** — a resume analysis platform with 6 AI agents running in parallel with fallback chains and circuit breakers across 5 LLM providers. 100+ real users.
 >
-> Third, **ACARE** — a voice-controlled surgical robot. This was a team project, institutionally funded. I built the voice pipeline and the agentic planner. The robot has a 6-layer deterministic safety kernel.
+> Third, **ACARE** — a voice-controlled surgical robot. Team project, institutionally funded. I built the voice pipeline and the agentic planner with a 6-layer deterministic safety kernel.
 >
 > Fourth, **SYNAPSE** — an 8-node LangGraph reasoning engine with RAGAS evaluation, connected to a knowledge graph with 10K+ entities.
 >
-> I'm excited about this role because it's configuring Amelia for enterprise clients — building integrations, designing conversation flows, iterating with clients. I've done exactly that pattern in SuperOwl. I want to bring that to SoundHound."
+> I'm excited about this role because I want to apply my experience building production AI systems — voice pipelines, multi-agent orchestration, product deployments — to solve real problems. I've shipped end-to-end. I want to keep doing that."
 
 ### What NOT to Say
 
